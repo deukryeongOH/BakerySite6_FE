@@ -1,10 +1,37 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { COLORS } from "@/lib/theme";
+import { useAuth } from "@/lib/auth/auth-context";
+import { ApiException } from "@/lib/api/types";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const { login } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await login(email, password);
+      router.push("/");
+    } catch (err) {
+      setError(err instanceof ApiException ? err.message : "로그인에 실패했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <div
-      className="flex-1 flex flex-col items-center justify-center px-8 gap-10"
+      className="flex-1 flex flex-col items-center justify-center px-8 gap-8"
       style={{ background: COLORS.bg }}
     >
       <div className="flex flex-col items-center gap-4">
@@ -26,22 +53,47 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
-      <div className="w-full flex flex-col gap-3">
-        <Link
-          href="/"
-          className="w-full py-3.5 rounded-lg flex items-center justify-center gap-2 text-sm font-semibold"
-          style={{ background: "#FEE500", color: "#191919" }}
+
+      <form onSubmit={handleSubmit} className="w-full flex flex-col gap-3">
+        <input
+          type="email"
+          required
+          placeholder="이메일"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg text-sm outline-none"
+          style={{ background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
+        />
+        <input
+          type="password"
+          required
+          placeholder="비밀번호"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full px-4 py-3 rounded-lg text-sm outline-none"
+          style={{ background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
+        />
+        {error && (
+          <p className="text-xs" style={{ color: "#E0554F" }}>
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full py-3.5 rounded-lg text-sm font-bold disabled:opacity-60"
+          style={{ background: COLORS.accent, color: COLORS.bg }}
         >
-          <span>💬</span> 카카오로 시작하기
+          {isSubmitting ? "로그인 중..." : "로그인"}
+        </button>
+      </form>
+
+      <p className="text-sm" style={{ color: COLORS.muted }}>
+        아직 계정이 없으신가요?{" "}
+        <Link href="/signup" className="font-semibold" style={{ color: COLORS.accent }}>
+          회원가입
         </Link>
-        <Link
-          href="/"
-          className="w-full py-3.5 rounded-lg flex items-center justify-center gap-2 text-sm font-semibold"
-          style={{ background: COLORS.text, color: "#191919" }}
-        >
-          <span className="font-bold">G</span> Google로 시작하기
-        </Link>
-      </div>
+      </p>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Inter, JetBrains_Mono } from "next/font/google";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const playfairDisplay = Playfair_Display({
@@ -35,7 +36,9 @@ export default function RootLayout({
       lang="ko"
       className={`dark ${playfairDisplay.variable} ${inter.variable} ${jetbrainsMono.variable} h-dvh antialiased`}
     >
-      <body className="h-dvh flex flex-col overflow-hidden font-sans">{children}</body>
+      <body className="h-dvh flex flex-col overflow-hidden font-sans">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
