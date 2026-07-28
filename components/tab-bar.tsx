@@ -13,7 +13,11 @@ export function TabBar({ activeHref }: { activeHref: string }) {
   return (
     <div
       className="flex flex-shrink-0 border-t"
-      style={{ background: COLORS.surface, borderColor: COLORS.border }}
+      style={{
+        background: COLORS.surface,
+        borderColor: COLORS.border,
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
     >
       {TABS.map(({ href, label, icon: Icon }) => {
         const active = href === activeHref;

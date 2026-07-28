@@ -97,7 +97,7 @@ export default function MyPage() {
 
   return (
     <div className="flex flex-col flex-1" style={{ background: COLORS.bg }}>
-      <div className="px-4 pt-12 pb-4 flex-shrink-0">
+      <div className="px-4 pb-4 flex-shrink-0" style={{ paddingTop: "max(3rem, env(safe-area-inset-top))" }}>
         <h1 className="text-xl font-bold" style={{ color: COLORS.text }}>
           마이페이지
         </h1>

@@ -39,7 +39,10 @@ export default function WishlistPage() {
 
   return (
     <div className="flex flex-col flex-1" style={{ background: COLORS.bg }}>
-      <div className="flex items-center justify-between px-4 pt-12 pb-4 flex-shrink-0">
+      <div
+        className="flex items-center justify-between px-4 pb-4 flex-shrink-0"
+        style={{ paddingTop: "max(3rem, env(safe-area-inset-top))" }}
+      >
         <span className="text-xl font-bold" style={{ color: COLORS.text }}>
           찜
         </span>

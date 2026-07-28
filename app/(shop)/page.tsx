@@ -53,7 +53,10 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col flex-1" style={{ background: COLORS.bg }}>
-      <div className="flex items-center justify-between px-4 pt-12 pb-3 flex-shrink-0">
+      <div
+        className="flex items-center justify-between px-4 pb-3 flex-shrink-0"
+        style={{ paddingTop: "max(3rem, env(safe-area-inset-top))" }}
+      >
         <span className="text-2xl font-bold font-serif" style={{ color: COLORS.text }}>
           오픈베이크
         </span>

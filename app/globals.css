@@ -184,3 +184,30 @@
     line-height: 1.5;
   }
 }
+
+/*
+ * 아래는 @layer 밖(unlayered) 스타일 — CSS Cascade Layers 스펙상 unlayered 규칙은
+ * 명시도와 무관하게 @layer 안의 모든 규칙(Tailwind 유틸리티 포함)보다 항상 우선한다.
+ * text-sm(14px) 등을 쓴 개별 input에 매번 !important를 걸지 않고 이 한 곳에서
+ * "모바일에서 input 폰트는 항상 16px 이상"을 강제하기 위해 의도적으로 이렇게 뺐다 —
+ * iOS Safari는 포커스 시 input의 실제 폰트 크기가 16px 미만이면 자동으로 화면을
+ * 확대해버려서, 폼이 있는 화면마다 사용자가 매번 손으로 다시 축소해야 하는 문제가 있다.
+ */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+html,
+body {
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
