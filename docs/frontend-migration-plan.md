@@ -88,7 +88,7 @@ app/admin/approvals/page.tsx
    - ⚠️ **`GET /drops/{id}/info`의 "래퍼 없음" 문서 설명도 실제와 다르다** — 실측 결과 다른 API와 동일하게 `{success,data}` 래퍼가 있다. 처음엔 문서를 믿고 `unwrapped` 파싱을 했다가 모든 필드가 `undefined`가 되면서 홈/드롭상세가 에러 없이 조용히 빈 화면만 뜨는 버그가 났었다(2026-07-28 브라우저로 재현·수정). `lib/api/drop.ts`의 `getDropInfo`는 이제 일반 `apiRequest`(래퍼 있음 전제)로 파싱한다 — 이 API를 다시 건드릴 일이 있으면 문서보다 실측을 우선할 것.
    - ⚠️ **백엔드 버그, 2026-07-28 로컬에서 직접 수정함(커밋/푸시는 안 함, 백엔드 팀 공유 예정)**: `GET /drops/{id}/info`와 `GET /drops/mine`이 `LazyInitializationException`(`pickUpAvailableDate` 컬렉션을 세션 밖에서 직렬화)으로 500이 났었다. `DropService.getDropProductInfo`에 `@Transactional(readOnly=true)` 추가 + `DropProductInfo`/`DropProductInfoResponse` 생성 시 `pickUpAvailableDate`를 `new HashSet<>(...)`로 복사하도록 고쳐서 로컬에서는 해결됨. **백엔드 레포에 아직 커밋되지 않은 로컬 전용 수정**이므로, 백엔드를 새로 pull하거나 재클론하면 이 문제가 다시 나타남 — 팀 공유 후 정식 커밋 필요.
    - drop/cart 쪽 응답 스펙은 2026-07-28 백엔드 갱신으로 `GET /cart`의 `drop`/`seller`/`estimatedAmount`/`pickupDates`가 실제 값으로 채워짐. **order 쪽은 여전히 TODO 많음**: 주문 데이터가 스텁 상수(seller/가격/상품명), `dropCloseAt` 필드 자체가 응답에서 제거돼 `orderState==="PAID"`로만 취소 가능 여부 판단, 취소 시 재고는 복구됨(`OR002`/`OR003` 문서 참고).
-7. **M6 판매자 대시보드** — `GET /drops/mine`, `GET /seller/orders` 둘 다 미구현이라 최하위 우선순위, mock 데이터 유지 상태로 남겨둘 수 있음을 팀에 공지.
+7. **M6 판매자 대시보드 — 드롭 CRUD 실연동 완료(2026-07-28), 주문 집계는 보류.** `GET /drops/mine`이 이제 구현돼 있어(위 M5 항목 참고) 내 드롭 목록/등록(`app/seller/drops/new`)/수정(`app/seller/drops/[dropId]/edit`)/삭제를 전부 실연동했고, 대시보드에 예정/진행중/종료 탭 필터링도 추가함. `sellers/me`(신청 여부/상태 조회)도 새로 백엔드에 붙여서 `lib/seller/seller-storage.ts` 로컬스토리지 워크어라운드를 제거함(`docs/backend-api-requests.md` "해결됨" §1). **원본 디자인에 있던 "오늘 픽업 예정"/"날짜별 픽업 집계" 위젯은 구현하지 않음** — `GET /seller/orders`가 여전히 없고 order 도메인 자체가 스텁 데이터라 값이 무의미하므로, `docs/backend-api-requests.md` 미해결 §1에 요청만 기록해둠.
 
 ## 검증 방법 (전 마일스톤 공통)
 

@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { COLORS } from "@/lib/theme";
 import { useAuth } from "@/lib/auth/auth-context";
 import * as authApi from "@/lib/api/auth";
+import * as sellerApi from "@/lib/api/seller";
 import { ApiException } from "@/lib/api/types";
 
 const inputClass = "w-full px-4 py-2.5 rounded-lg text-sm outline-none";
@@ -19,6 +20,17 @@ export default function MyPage() {
     queryFn: () => authApi.getMember(memberId!),
     enabled: memberId !== null,
   });
+
+  const sellerQuery = useQuery({
+    queryKey: ["mySeller"],
+    queryFn: sellerApi.getMySeller,
+    enabled: memberId !== null,
+    retry: false,
+  });
+  const noApplication =
+    sellerQuery.isError &&
+    sellerQuery.error instanceof ApiException &&
+    sellerQuery.error.code === "C003";
 
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
@@ -232,13 +244,21 @@ export default function MyPage() {
         </div>
         )}
 
-        <Link
-          href="/seller/dashboard"
-          className="w-full py-3 rounded-lg text-sm text-center"
-          style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
-        >
-          판매자 입점 신청
-        </Link>
+        {/* isPending 사용 — enabled:false인 동안 isLoading이 false로 평가돼(fetch 시작
+            전이므로), memberId가 아직 안 채워진 첫 렌더에 라벨이 잘못 뜨는 걸 막는다. */}
+        {!sellerQuery.isPending && (
+          <Link
+            href={noApplication ? "/seller/register" : "/seller/dashboard"}
+            className="w-full py-3 rounded-lg text-sm text-center"
+            style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
+          >
+            {noApplication
+              ? "판매자 입점 신청"
+              : sellerQuery.data?.applicationStatus === "APPROVED"
+                ? "내 드롭 관리"
+                : "판매자 입점 현황"}
+          </Link>
+        )}
         {role === "ADMIN" && (
           <Link
             href="/admin/approvals"

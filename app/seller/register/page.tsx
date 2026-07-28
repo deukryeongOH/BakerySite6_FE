@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as sellerApi from "@/lib/api/seller";
-import { getSellerId, setSellerId } from "@/lib/seller/seller-storage";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ApiException } from "@/lib/api/types";
 
@@ -21,17 +20,24 @@ type Step = 1 | 2 | 3;
 
 export default function SellerRegisterPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { memberId } = useAuth();
   const [step, setStep] = useState<Step>(1);
 
   // Seller-Member는 0..1 관계 — 이미 신청한 회원이 다시 신청 폼을 채워도
-  // 서버가 SE005(이미 신청 완료)로 거부하므로, 로컬에 기록이 있으면 아예
+  // 서버가 SE005(이미 신청 완료)로 거부하므로, 신청 이력이 있으면 아예
   // 대시보드로 돌려보낸다.
+  const mySellerQuery = useQuery({
+    queryKey: ["mySeller"],
+    queryFn: sellerApi.getMySeller,
+    enabled: memberId !== null,
+    retry: false,
+  });
   useEffect(() => {
-    if (memberId !== null && getSellerId(memberId) !== null) {
+    if (mySellerQuery.data) {
       router.replace("/seller/dashboard");
     }
-  }, [memberId, router]);
+  }, [mySellerQuery.data, router]);
 
   const [business, setBusiness] = useState({
     businessNumber: "",
@@ -81,8 +87,8 @@ export default function SellerRegisterPage() {
         businessAddress: business.businessAddress,
         businessRepresentativeName: business.businessRepresentativeName,
       }),
-    onSuccess: (res) => {
-      setSellerId(res.memberId, res.sellerId);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mySeller"] });
       router.push("/seller/dashboard");
     },
   });

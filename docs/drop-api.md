@@ -156,28 +156,36 @@ JSON
 
 ### 4.2 요청 파라미터
 
+> ⚠️ 2026-07-28 실제 컨트롤러(`DropController.registerDropProduct`) 확인 결과, `POST /register`는 2-2절(수정)과 **완전히 동일한 `DropProductInfoRequest`** DTO를 그대로 받습니다. 이전 버전 문서에는 등록 전용으로 `pickUpAvailableDateList`/`dropPeriodStart`/`dropPeriodEnd` 필드명이 적혀 있었으나 실제 코드에는 존재하지 않는 필드였습니다(프론트가 이 문서를 그대로 구현했다가 `C001`/`NotEmpty` 검증 실패로 발견). 아래 필드명이 정확한 스펙입니다.
+
 | **구분** | **필드명** | **타입** | **필수 여부** | **설명 / 제약 조건** |
 | --- | --- | --- | --- | --- |
-| BODY | `dropProductInfo`  | DropProductInfo | Y | 드롭 정보 및 상품 정보 |
-| HEADER | `customUserDetails`  | CustomUserDetails | Y | 토큰에 저장된 로그인한 유저의 정보 |
+| Header | `Authorization` | String | Y | Bearer 토큰 (승인된 판매자) |
+| Body | `name` | String | Y | 상품명 |
+| Body | `description` | String | Y | 상품 설명 |
+| Body | `imageUrl` | String | Y | 이미지 URL |
+| Body | `pickUpAvailableDates` | Set\<LocalDate\> | Y | 픽업 가능 날짜 목록 (비어있으면 안 됨) |
+| Body | `dropStart` | LocalDateTime | Y | 드롭 시작 일시 |
+| Body | `dropEnd` | LocalDateTime | Y | 드롭 종료 일시 |
+| Body | `limitQuantity` | int | Y | 1인당 제한 수량(1 이상, 한정 수량 아님) |
+| Body | `price` | int | Y | 단가 (0보다 커야 함) |
+| Body | `totalQuantity` | int | Y | 총 수량 (0보다 커야 함) |
 
 ### 4.2.1 요청 예시
 
 ```
 POST /api/v1/drops/register HTTP/1.1
-
-Content-Type: application/json        
+Authorization: Bearer eyJhbGciOi...
+Content-Type: application/json
 
 {
 	"name": "버터떡",
 	"description": "버터를 많이 써서 향이 좋고 쫀득해요.",
-	"imageUrl": "gtLisBCgoKDg0OGhAQFy0lICUv...",
-	"pickUpAvailableDateList": ["2026-08-01",
-        "2026-08-02",
-        "2026-08-03"],
-	"dropPeriodStart: "2026-07-25T13:00:00",
-	"dropPeriodEnd": "2026-07-25T14:00:00",
-	"limitQuantity": 5 // 한정 수량 (1인당 구매 제한 아님),
+	"imageUrl": "https://cdn.openbake.com/drops/new.jpg",
+	"pickUpAvailableDates": ["2026-08-01", "2026-08-02", "2026-08-03"],
+	"dropStart": "2026-07-25T13:00:00",
+	"dropEnd": "2026-07-25T14:00:00",
+	"limitQuantity": 5,
 	"price": 3000,
 	"totalQuantity": 200
 }

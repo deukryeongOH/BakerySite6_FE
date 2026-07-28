@@ -120,3 +120,13 @@ export interface Seller {
 export function getSeller(sellerId: number) {
   return apiRequest<Seller>(`/api/v1/sellers/${sellerId}`, { auth: false });
 }
+
+export interface MySeller extends Seller {
+  /** 본인 조회 API라 공개 조회(Seller)와 달리 반려 사유가 내려온다. */
+  rejectReason: string | null;
+}
+
+/** 로그인한 회원 본인의 판매자 신청 조회(memberId 기준). 신청 이력이 없으면 404 C003. */
+export function getMySeller() {
+  return apiRequest<MySeller>("/api/v1/sellers/me");
+}

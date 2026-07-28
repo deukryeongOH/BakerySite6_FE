@@ -71,3 +71,70 @@ export function lockStart(dropId: number, quantity: number) {
     body: { quantity },
   });
 }
+
+/**
+ * 판매자 본인 드롭 응답(docs/drop-api.md §1.3/§2.3, /mine·PATCH 공용).
+ * 고객용 DropInfo와 거의 같지만 dropId가 추가되고, 픽업일 필드명이
+ * pickUpAvailableDates로 다르다(두 응답 DTO가 서로 다른 클래스라 이름이 안 맞춰져 있음).
+ */
+export interface DropProductInfoResponse {
+  dropId: number;
+  name: string;
+  description: string;
+  imageUrl: string;
+  pickUpAvailableDates: string[];
+  dropStart: string;
+  dropEnd: string;
+  limitQuantity: number;
+  price: number;
+  totalQuantity: number;
+  remainQuantity: number;
+  dropStatus: DropApiStatus;
+}
+
+/**
+ * POST /register와 PATCH /{dropId}가 공유하는 바디 DTO(둘 다 백엔드에서 동일한
+ * DropProductInfoRequest를 받음 — 2026-07-28 실제 컨트롤러 확인. 이전엔 register가
+ * pickUpAvailableDateList/dropPeriodStart/dropPeriodEnd라는 별도 필드명을 쓴다고
+ * 문서에 적혀 있었으나 실제 코드엔 없는 필드라 등록 시 400 C001로 실패했었다).
+ */
+export interface DropProductInfoRequest {
+  name: string;
+  description: string;
+  imageUrl: string;
+  pickUpAvailableDates: string[];
+  dropStart: string;
+  dropEnd: string;
+  limitQuantity: number;
+  price: number;
+  totalQuantity: number;
+}
+
+export function registerDrop(body: DropProductInfoRequest) {
+  return apiRequest<DropProductInfoResponse>("/api/v1/drops/register", {
+    method: "POST",
+    body,
+  });
+}
+
+/** 로그인한 판매자 본인이 등록한 드롭 전체 조회. 승인된 판매자가 아니면 400 C002. */
+export function getMyDrops() {
+  return apiRequest<DropProductInfoResponse[]>("/api/v1/drops/mine");
+}
+
+/**
+ * UPCOMING 상태인 드롭만 수정 가능(그 외엔 409 DR017). ⚠️ totalQuantity를 보내면
+ * 백엔드가 남은 재고를 이 값으로 리셋한다(DropInventory.resetQuantity) — 이미 판매된
+ * 수량과 무관하게 재고가 통째로 바뀌므로, 호출하는 UI에서 반드시 경고를 보여줘야 한다.
+ */
+export function updateDrop(dropId: number, body: DropProductInfoRequest) {
+  return apiRequest<DropProductInfoResponse>(`/api/v1/drops/${dropId}`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+/** UPCOMING 상태인 드롭만 삭제 가능(그 외엔 409 DR017). 204 No Content. */
+export function deleteDrop(dropId: number) {
+  return apiRequest<void>(`/api/v1/drops/${dropId}`, { method: "DELETE" });
+}

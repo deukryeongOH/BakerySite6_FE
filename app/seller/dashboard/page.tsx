@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as sellerApi from "@/lib/api/seller";
-import { getSellerId } from "@/lib/seller/seller-storage";
+import * as dropApi from "@/lib/api/drop";
 import { useAuth } from "@/lib/auth/auth-context";
+import { fmtDateTime } from "@/lib/format";
+import { ApiException } from "@/lib/api/types";
 import type { ApplicationStatus } from "@/lib/api/seller";
+import type { DropApiStatus } from "@/lib/api/drop";
 
 const STATUS_LABEL: Record<ApplicationStatus, string> = {
   PENDING: "승인 대기",
@@ -16,49 +19,71 @@ const STATUS_LABEL: Record<ApplicationStatus, string> = {
   REJECTED: "반려됨",
 };
 
+const DROP_STATUS_LABEL: Record<DropApiStatus, string> = {
+  UPCOMING: "시작 전",
+  ACTIVE: "진행 중",
+  COMPLETED: "종료",
+};
+
+const DROP_TABS: { status: DropApiStatus; label: string }[] = [
+  { status: "UPCOMING", label: "예정" },
+  { status: "ACTIVE", label: "진행중" },
+  { status: "COMPLETED", label: "종료" },
+];
+
 export default function SellerDashboardPage() {
   const { memberId } = useAuth();
-
-  // getSellerId()는 localStorage를 읽는다 — SSR에는 없으므로 렌더 중
-  // 직접 호출하면 하이드레이션 불일치가 난다. mount 이후로 미룬다.
-  const [sellerId, setSellerId] = useState<number | null>(null);
-  useEffect(() => {
-    function sync() {
-      setSellerId(memberId !== null ? getSellerId(memberId) : null);
-    }
-    sync();
-  }, [memberId]);
+  const queryClient = useQueryClient();
+  const [dropTab, setDropTab] = useState<DropApiStatus>("UPCOMING");
 
   const sellerQuery = useQuery({
-    queryKey: ["seller", sellerId],
-    queryFn: () => sellerApi.getSeller(sellerId!),
-    enabled: sellerId !== null,
+    queryKey: ["mySeller"],
+    queryFn: sellerApi.getMySeller,
+    enabled: memberId !== null,
+    retry: false,
   });
 
-  // GET /sellers/{id}는 인증 없이 누구나 조회 가능한 공개 API라, 로컬에 저장된
-  // sellerId가 실제로 지금 로그인한 memberId 소유인지 확인한다 — 예전 키 스킴이나
-  // 다른 계정이 같은 브라우저를 쓴 경우 등으로 어긋날 수 있어서.
-  const seller =
-    sellerQuery.data && sellerQuery.data.memberId === memberId ? sellerQuery.data : null;
-  const hasApplication = sellerId !== null && seller !== null;
+  const noApplication =
+    sellerQuery.isError &&
+    sellerQuery.error instanceof ApiException &&
+    sellerQuery.error.code === "C003";
+  const seller = sellerQuery.data ?? null;
+  const isApproved = seller?.applicationStatus === "APPROVED";
+
+  const myDropsQuery = useQuery({
+    queryKey: ["myDrops"],
+    queryFn: () => dropApi.getMyDrops(),
+    enabled: isApproved,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (dropId: number) => dropApi.deleteDrop(dropId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["myDrops"] }),
+  });
+
+  function handleDelete(dropId: number) {
+    if (window.confirm("이 드롭을 삭제하시겠습니까?")) {
+      deleteMutation.mutate(dropId);
+    }
+  }
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto" style={{ background: COLORS.bg }}>
       <BackHeader title="판매자 대시보드" href="/" />
 
       <div className="flex-1 px-4 py-4 flex flex-col gap-4">
-        {sellerId !== null && sellerQuery.isLoading && (
+        {sellerQuery.isPending && (
           <p className="text-sm" style={{ color: COLORS.muted }}>
             불러오는 중...
           </p>
         )}
-        {sellerId !== null && sellerQuery.isError && (
+        {sellerQuery.isError && !noApplication && (
           <p className="text-sm" style={{ color: "#E0554F" }}>
             판매자 정보를 불러오지 못했습니다.
           </p>
         )}
 
-        {!sellerQuery.isLoading && !hasApplication && (
+        {noApplication && (
           <div className="flex flex-col items-center justify-center gap-4 py-16">
             <p className="text-sm" style={{ color: COLORS.muted }}>
               아직 판매자 입점 신청 내역이 없습니다.
@@ -109,6 +134,116 @@ export default function SellerDashboardPage() {
               정산 계좌 {seller.settlementBankCode} {seller.settlementAccountNumberMasked}
               {seller.accountVerified ? " (인증됨)" : " (미인증)"}
             </p>
+            {seller.applicationStatus === "REJECTED" && seller.rejectReason && (
+              <p
+                className="text-xs pt-2"
+                style={{ color: "#E0554F", borderTop: `1px solid ${COLORS.border}` }}
+              >
+                반려 사유: {seller.rejectReason}
+              </p>
+            )}
+          </div>
+        )}
+
+        {isApproved && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold" style={{ color: COLORS.text }}>
+                내 드롭
+              </span>
+              <Link
+                href="/seller/drops/new"
+                className="text-xs font-semibold"
+                style={{ color: COLORS.accent }}
+              >
+                + 새 드롭 등록
+              </Link>
+            </div>
+
+            {myDropsQuery.isLoading && (
+              <p className="text-sm" style={{ color: COLORS.muted }}>
+                불러오는 중...
+              </p>
+            )}
+            {myDropsQuery.isError && (
+              <p className="text-sm" style={{ color: "#E0554F" }}>
+                드롭 목록을 불러오지 못했습니다.
+              </p>
+            )}
+
+            {myDropsQuery.data && (
+              <div className="flex gap-2">
+                {DROP_TABS.map((tab) => (
+                  <button
+                    key={tab.status}
+                    onClick={() => setDropTab(tab.status)}
+                    className="px-3 py-1.5 rounded-full text-sm"
+                    style={{
+                      background: dropTab === tab.status ? COLORS.accent : COLORS.surface,
+                      color: dropTab === tab.status ? COLORS.bg : COLORS.muted,
+                      border: dropTab === tab.status ? "none" : `1px solid ${COLORS.border}`,
+                      fontWeight: dropTab === tab.status ? 600 : 400,
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {myDropsQuery.data?.filter((d) => d.dropStatus === dropTab).length === 0 && (
+              <p className="text-sm" style={{ color: COLORS.muted }}>
+                {DROP_TABS.find((t) => t.status === dropTab)?.label} 드롭이 없습니다.
+              </p>
+            )}
+
+            {myDropsQuery.data
+              ?.filter((d) => d.dropStatus === dropTab)
+              .map((drop) => (
+              <div
+                key={drop.dropId}
+                className="rounded-xl p-4 flex flex-col gap-2"
+                style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold" style={{ color: COLORS.text }}>
+                    {drop.name}
+                  </span>
+                  <span
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded"
+                    style={{ background: COLORS.accentSoft, color: COLORS.accent }}
+                  >
+                    {DROP_STATUS_LABEL[drop.dropStatus]}
+                  </span>
+                </div>
+                <p className="text-xs" style={{ color: COLORS.muted }}>
+                  {fmtDateTime(drop.dropStart)} ~ {fmtDateTime(drop.dropEnd)}
+                </p>
+                <p className="text-xs" style={{ color: COLORS.muted }}>
+                  {drop.price.toLocaleString()}원 · 재고 {drop.remainQuantity}/{drop.totalQuantity}
+                </p>
+
+                {drop.dropStatus === "UPCOMING" && (
+                  <div className="flex gap-2 pt-2" style={{ borderTop: `1px solid ${COLORS.border}` }}>
+                    <Link
+                      href={`/seller/drops/${drop.dropId}/edit`}
+                      className="flex-1 py-2 rounded-lg text-sm text-center"
+                      style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
+                    >
+                      수정
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(drop.dropId)}
+                      disabled={deleteMutation.isPending}
+                      className="flex-1 py-2 rounded-lg text-sm disabled:opacity-60"
+                      style={{ border: `1px solid ${COLORS.border}`, color: "#E0554F" }}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

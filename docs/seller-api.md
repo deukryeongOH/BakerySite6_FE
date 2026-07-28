@@ -17,6 +17,7 @@
 | POST | `/api/v1/sellers/apply` | 판매자 입점 신청 |
 | PATCH | `/api/v1/sellers/{id}/status` | 입점 승인/반려 (admin) |
 | GET | `/api/v1/sellers/{id}` | 판매자 조회 |
+| GET | `/api/v1/sellers/me` | 내 판매자 신청 조회 |
 
 > 사업자 인증(1-1)은 상태를 저장하지 않는 단순 대조 검증입니다. `apply`(1-4) 요청에 사업자 정보를 다시 담아 보내면, 그 시점에 서버가 한 번 더 대조합니다.
 계좌 인증(1-2/1-3)은 판매자 신청 이전, 로그인한 회원(memberId) 기준으로 Redis에 임시 저장됩니다. 아직 Seller가 생성되기 전이라 sellerId가 없기 때문입니다. 인증이 끝난 상태로 `apply`를 호출하면 그 시점에 저장된 계좌 정보로 Seller가 생성됩니다.
@@ -441,7 +442,7 @@
 ```
 
 > 계좌번호는 암호화 컬럼이라 복호화 후 마스킹 처리해서 내려줍니다. 원본 전체 번호는 어떤 조회 API에서도 그대로 반환하지 않습니다 (본인이라도 마스킹된 값만 확인 - 재등록 시에는 새로 입력).
-`rejectReason`은 공개 API인 이 응답에는 포함하지 않습니다. 신청자 본인에게 반려 사유를 보여주는 기능은 별도의 인증된 “내 판매자 신청 현황 조회” API가 필요한데, 아직 스펙에 없어서 확정되지 않은 사항으로 남겨둡니다.
+`rejectReason`은 공개 API인 이 응답에는 포함하지 않습니다. 신청자 본인에게 반려 사유를 보여주는 기능은 1-7(내 판매자 신청 조회)에서 제공합니다.
 > 
 
 ## 4. 에러 처리
@@ -459,3 +460,60 @@
   }
 }
 ```
+
+### 1-7. 내 판매자 신청 조회
+
+## 1. 기본 정보
+
+- **설명:** 로그인한 회원 본인의 판매자 신청 정보를 memberId 기준으로 조회합니다. 신청 이력이 없으면(Seller-Member는 0..1 관계) 404. 본인 조회이므로 1-6과 달리 `rejectReason`을 포함합니다.
+- **호출 시점:** 마이페이지/판매자 대시보드 진입 시, 본인의 sellerId를 모르는 상태에서 신청 여부·상태를 확인할 때.
+- **통신 기본 규격:**
+    - **Method:** `GET`
+    - **Path:** `/api/v1/sellers/me`
+    - Header: `Authorization` Bearer 토큰
+
+## 2. 요청 명세
+
+| 구분 | 필드명 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- | --- |
+| Header | `Authorization` | String | Y | Bearer 토큰 |
+
+## 3. 응답 명세
+
+- `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "sellerId": 1,
+    "memberId": 1,
+    "bakeryName": "세종베이커리",
+    "businessNumber": "123-45-67890",
+    "applicationStatus": "REJECTED",
+    "rejectReason": "제출한 사업장 주소가 실제 등록 주소와 일치하지 않습니다.",
+    "settlementBankCode": "088",
+    "settlementAccountNumberMasked": "110-****-5678",
+    "accountVerified": true,
+    "accountVerifiedAt": "2026-07-10T09:00:00"
+  }
+}
+```
+
+## 4. 에러 처리
+
+| HTTP Status | 코드 | 메시지 | 발생 시나리오 |
+| --- | --- | --- | --- |
+| 404 | C003 | 대상을 찾을 수 없습니다. | 이 회원이 아직 판매자 신청을 한 적 없음 |
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "C003",
+    "message": "대상을 찾을 수 없습니다."
+  }
+}
+```
+
+> ⚠️ `SecurityConfig`에 `GET /api/v1/sellers/*`(단일 세그먼트 와일드카드)가 `permitAll()`로 열려있어, `/sellers/me`도 그 패턴에 그대로 매치된다. `/sellers/me`를 그 위에 `authenticated()`로 먼저 매칭시켜두지 않으면 인증 없이 통과되고, `CurrentMemberProvider.getId()`가 익명 principal(String)을 `Long`으로 캐스팅하려다 `ClassCastException`이 난다 — 이미 반영 완료(`SecurityConfig.java`).
