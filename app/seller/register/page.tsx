@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as sellerApi from "@/lib/api/seller";
-import { setSellerId } from "@/lib/seller/seller-storage";
+import { getSellerId, setSellerId } from "@/lib/seller/seller-storage";
+import { useAuth } from "@/lib/auth/auth-context";
 import { ApiException } from "@/lib/api/types";
 
 const inputClass = "w-full px-4 py-3 rounded-lg text-sm outline-none";
@@ -20,7 +21,17 @@ type Step = 1 | 2 | 3;
 
 export default function SellerRegisterPage() {
   const router = useRouter();
+  const { memberId } = useAuth();
   const [step, setStep] = useState<Step>(1);
+
+  // Seller-Member는 0..1 관계 — 이미 신청한 회원이 다시 신청 폼을 채워도
+  // 서버가 SE005(이미 신청 완료)로 거부하므로, 로컬에 기록이 있으면 아예
+  // 대시보드로 돌려보낸다.
+  useEffect(() => {
+    if (memberId !== null && getSellerId(memberId) !== null) {
+      router.replace("/seller/dashboard");
+    }
+  }, [memberId, router]);
 
   const [business, setBusiness] = useState({
     businessNumber: "",
@@ -71,7 +82,7 @@ export default function SellerRegisterPage() {
         businessRepresentativeName: business.businessRepresentativeName,
       }),
     onSuccess: (res) => {
-      setSellerId(res.sellerId);
+      setSellerId(res.memberId, res.sellerId);
       router.push("/seller/dashboard");
     },
   });

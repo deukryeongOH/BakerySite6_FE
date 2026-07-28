@@ -10,6 +10,7 @@
 - `docs/DarkArtisanBakeryDesign/` — Figma에서 뽑은 인터랙티브 디자인 프로토타입 원본 (이식 대상)
 - `docs/*-api.md` — 백엔드 API 명세 (코드 기준 검증됨, 백엔드 레포에서 동기화)
 - `docs/enum-reference.md` — 백엔드 상태값(enum) 참조표
+- `docs/backend-api-requests.md` — 프론트 개발 중 필요한데 백엔드에 아직 없는 API 요청 목록 (해결되면 해당 도메인 `*-api.md`로 정식 반영)
 
 ## 로컬 개발
 

@@ -11,7 +11,6 @@ import {
   type AuthProviderType,
   type Role,
 } from "@/lib/auth/token-storage";
-import { clearSellerId } from "@/lib/seller/seller-storage";
 
 interface AuthContextValue {
   memberId: number | null;
@@ -96,7 +95,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     clearTokens();
-    clearSellerId();
     router.push("/login");
   }, [router]);
 
