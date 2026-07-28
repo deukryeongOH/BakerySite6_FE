@@ -33,9 +33,9 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
-      className={`dark ${playfairDisplay.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`dark ${playfairDisplay.variable} ${inter.variable} ${jetbrainsMono.variable} h-dvh antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="h-dvh flex flex-col overflow-hidden font-sans">{children}</body>
     </html>
   );
 }
