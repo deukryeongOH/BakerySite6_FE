@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as sellerApi from "@/lib/api/seller";
+import { useAuth } from "@/lib/auth/auth-context";
 import { ApiException } from "@/lib/api/types";
 
 const inputClass = "flex-1 px-4 py-3 rounded-lg text-sm outline-none";
@@ -15,10 +17,21 @@ const inputStyle = {
 };
 
 export default function AdminApprovalsPage() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading, role } = useAuth();
   const queryClient = useQueryClient();
   const [sellerIdInput, setSellerIdInput] = useState("");
   const [lookupId, setLookupId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isAuthenticated) {
+      router.replace("/login");
+    } else if (role !== "ADMIN") {
+      router.replace("/");
+    }
+  }, [isLoading, isAuthenticated, role, router]);
 
   const sellerQuery = useQuery({
     queryKey: ["seller", lookupId],
@@ -40,6 +53,8 @@ export default function AdminApprovalsPage() {
     const id = Number(sellerIdInput);
     if (Number.isFinite(id) && id > 0) setLookupId(id);
   }
+
+  if (isLoading || !isAuthenticated || role !== "ADMIN") return null;
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto" style={{ background: COLORS.bg }}>

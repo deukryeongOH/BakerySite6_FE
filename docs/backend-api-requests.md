@@ -71,6 +71,71 @@
 - `app/seller/dashboard`가 이 API로 직접 조회하도록 교체(현재의 memberId 일치 방어 로직도 함께 정리 가능).
 - `app/seller/register` 진입 시에도 이 API로 기존 신청 여부를 먼저 확인해서, 폼을 다 채운 뒤 서버가 `SE005`(이미 신청 완료)로 거부하는 대신 진입 시점에 바로 대시보드로 돌려보낼 수 있게 됨.
 
+### 2. 판매자 승인 대기 목록 조회
+
+- **요청일:** 2026-07-28
+- **관련 도메인:** seller (`docs/seller-api.md`)
+- **배경:** 관리자 승인/반려 화면(`app/admin/approvals/page.tsx`)이 판매자 ID를 직접 입력받아 `GET /sellers/{id}`로 단건 조회하는 방식으로 구현돼 있습니다. 승인 대기 중인 신청을 목록으로 조회하는 API가 없어서, 관리자가 새로 들어온 신청의 ID를 알 방법이 없고(다른 채널로 별도 전달받아야 함) 어떤 신청이 대기 중인지 한눈에 파악할 수도 없습니다.
+- **요청:** `applicationStatus`(기본값 `PENDING`)로 필터링된 판매자 신청 목록을 조회하는 관리자 전용 API.
+- **호출 시점(예상):** 관리자가 `/admin/approvals` 진입 시.
+- **통신 기본 규격(제안):**
+    - **Method:** `GET`
+    - **Path:** `/api/v1/sellers`
+    - Header: `Authorization` Bearer 토큰 (admin, `PATCH /sellers/{id}/status`와 동일한 권한 체크)
+
+**요청 명세(제안)**
+
+| 구분 | 필드명 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- | --- |
+| Header | `Authorization` | String | Y | Bearer 토큰 (admin) |
+| Query | `applicationStatus` | String | N | `PENDING`/`APPROVED`/`REJECTED` 중 하나. 생략 시 `PENDING`만 반환 |
+
+**응답 명세(제안)**
+
+- `200 OK` — `GET /sellers/{id}` 응답 객체의 배열. 관리자 전용이므로 `rejectReason`도 포함.
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "sellerId": 3,
+      "memberId": 5,
+      "bakeryName": "달빛베이커리",
+      "businessNumber": "123-45-67891",
+      "applicationStatus": "PENDING",
+      "rejectReason": null,
+      "settlementBankCode": "088",
+      "settlementAccountNumberMasked": "110-****-1234",
+      "accountVerified": true,
+      "accountVerifiedAt": "2026-07-27T10:00:00"
+    }
+  ]
+}
+```
+
+**에러 처리(제안)**
+
+| HTTP Status | 코드 | 메시지 | 발생 시나리오 |
+| --- | --- | --- | --- |
+| 401 | ME002 | 유효하지 않은 인증 토큰입니다. | 토큰 만료/서명 오류 |
+| 403 | SE007 | 관리자만 접근할 수 있습니다. | admin이 아닌 회원이 호출 |
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "SE007",
+    "message": "관리자만 접근할 수 있습니다."
+  }
+}
+```
+
+**해결되면 프론트에서 할 일**
+
+- `app/admin/approvals/page.tsx`의 ID 직접 입력 폼을 이 목록 API 기반 리스트 UI로 교체(카드 클릭 시 기존 승인/반려 로직 재사용).
+- 승인/반려 처리 후 목록 쿼리를 invalidate해서 처리된 항목이 자동으로 빠지도록 정리.
+
 ---
 
 ## 해결됨
