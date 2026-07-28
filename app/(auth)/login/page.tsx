@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { COLORS } from "@/lib/theme";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ApiException } from "@/lib/api/types";
+import { GoogleSignInButton } from "@/components/google-sign-in-button";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +25,19 @@ export default function LoginPage() {
       router.push("/");
     } catch (err) {
       setError(err instanceof ApiException ? err.message : "로그인에 실패했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleGoogleCredential(idToken: string) {
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await loginWithGoogle(idToken);
+      router.push("/");
+    } catch (err) {
+      setError(err instanceof ApiException ? err.message : "Google 로그인에 실패했습니다.");
     } finally {
       setIsSubmitting(false);
     }
@@ -87,6 +101,16 @@ export default function LoginPage() {
           {isSubmitting ? "로그인 중..." : "로그인"}
         </button>
       </form>
+
+      <div className="w-full flex items-center gap-3">
+        <div className="flex-1 h-px" style={{ background: COLORS.border }} />
+        <span className="text-xs" style={{ color: COLORS.muted }}>
+          또는
+        </span>
+        <div className="flex-1 h-px" style={{ background: COLORS.border }} />
+      </div>
+
+      <GoogleSignInButton onCredential={handleGoogleCredential} />
 
       <p className="text-sm" style={{ color: COLORS.muted }}>
         아직 계정이 없으신가요?{" "}

@@ -11,7 +11,7 @@ import { ApiException } from "@/lib/api/types";
 const inputClass = "w-full px-4 py-2.5 rounded-lg text-sm outline-none";
 
 export default function MyPage() {
-  const { memberId, role, logout } = useAuth();
+  const { memberId, role, provider, logout } = useAuth();
   const queryClient = useQueryClient();
 
   const memberQuery = useQuery({
@@ -179,6 +179,7 @@ export default function MyPage() {
           </div>
         )}
 
+        {provider !== "GOOGLE" && (
         <div
           className="rounded-xl p-4"
           style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
@@ -229,6 +230,7 @@ export default function MyPage() {
             </button>
           </form>
         </div>
+        )}
 
         <Link
           href="/seller/dashboard"

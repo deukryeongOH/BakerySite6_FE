@@ -44,6 +44,24 @@ export function login(req: LoginRequest) {
   });
 }
 
+export interface OAuthLoginResponse {
+  memberId: number;
+  accessToken: string;
+  refreshToken: string;
+  email: string;
+  name: string;
+  newMember: boolean;
+}
+
+/** OAuth 로그인 응답에는 role이 내려오지 않는다 — 필요하면 getMember로 보정. */
+export function oauthLogin(provider: string, idToken: string) {
+  return apiRequest<OAuthLoginResponse>(`/api/v1/auth/oauth/${provider}`, {
+    method: "POST",
+    body: { idToken },
+    auth: false,
+  });
+}
+
 export function logout(refreshToken: string) {
   return apiRequest<void>("/api/v1/auth/logout", {
     method: "POST",

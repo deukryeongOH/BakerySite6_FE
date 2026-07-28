@@ -21,6 +21,7 @@ async function reissueAccessToken(): Promise<string> {
         setTokens({
           memberId: stored.memberId,
           role: stored.role,
+          provider: stored.provider,
           accessToken: json.data.accessToken,
           refreshToken: json.data.refreshToken,
         });

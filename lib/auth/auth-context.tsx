@@ -8,6 +8,7 @@ import {
   getTokens,
   setTokens,
   subscribeTokens,
+  type AuthProviderType,
   type Role,
 } from "@/lib/auth/token-storage";
 import { clearSellerId } from "@/lib/seller/seller-storage";
@@ -15,9 +16,11 @@ import { clearSellerId } from "@/lib/seller/seller-storage";
 interface AuthContextValue {
   memberId: number | null;
   role: Role | null;
+  provider: AuthProviderType | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -27,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [memberId, setMemberId] = useState<number | null>(null);
   const [role, setRole] = useState<Role | null>(null);
+  const [provider, setProvider] = useState<AuthProviderType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // localStorage는 서버에 없다. useSyncExternalStore의 getServerSnapshot(null)로
@@ -39,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const stored = getTokens();
       setMemberId(stored?.memberId ?? null);
       setRole(stored?.role ?? null);
+      setProvider(stored?.provider ?? null);
       setIsLoading(false);
     }
     sync();
@@ -52,7 +57,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshToken: res.refreshToken,
       memberId: res.memberId,
       role: res.role,
+      provider: "LOCAL",
     });
+  }, []);
+
+  const loginWithGoogle = useCallback(async (idToken: string) => {
+    const res = await authApi.oauthLogin("google", idToken);
+    setTokens({
+      accessToken: res.accessToken,
+      refreshToken: res.refreshToken,
+      memberId: res.memberId,
+      role: "CUSTOMER", // OAuth 응답엔 role이 없음 — 아래에서 실제 값으로 보정
+      provider: "GOOGLE",
+    });
+    try {
+      const member = await authApi.getMember(res.memberId);
+      if (member.role !== "CUSTOMER") {
+        setTokens({
+          accessToken: res.accessToken,
+          refreshToken: res.refreshToken,
+          memberId: res.memberId,
+          role: member.role,
+          provider: "GOOGLE",
+        });
+      }
+    } catch {
+      // role 보정에 실패해도 로그인 자체(기본값 CUSTOMER)는 유지한다
+    }
   }, []);
 
   const logout = useCallback(async () => {
@@ -71,7 +102,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ memberId, role, isAuthenticated: memberId !== null, isLoading, login, logout }}
+      value={{
+        memberId,
+        role,
+        provider,
+        isAuthenticated: memberId !== null,
+        isLoading,
+        login,
+        loginWithGoogle,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>

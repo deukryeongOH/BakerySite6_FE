@@ -23,4 +23,7 @@ npm run dev
 `.env.local`:
 ```
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=<백엔드 .env의 GOOGLE_CLIENT_ID와 동일한 값>
 ```
+
+`NEXT_PUBLIC_GOOGLE_CLIENT_ID`는 백엔드가 ID 토큰 검증 시 audience로 대조하는 값과 반드시 일치해야 함(백엔드 `.env`의 `GOOGLE_CLIENT_ID` 참고). Client ID는 비밀값이 아니라 공개해도 되는 값(OAuth 프로토콜상 클라이언트 요청에 항상 포함됨).

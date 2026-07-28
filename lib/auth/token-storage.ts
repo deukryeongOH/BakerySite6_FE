@@ -1,15 +1,18 @@
 export type Role = "ADMIN" | "CUSTOMER";
+export type AuthProviderType = "LOCAL" | "GOOGLE";
 
 const ACCESS_TOKEN_KEY = "openbake:accessToken";
 const REFRESH_TOKEN_KEY = "openbake:refreshToken";
 const MEMBER_ID_KEY = "openbake:memberId";
 const ROLE_KEY = "openbake:role";
+const PROVIDER_KEY = "openbake:provider";
 
 export interface StoredAuth {
   accessToken: string;
   refreshToken: string;
   memberId: number;
   role: Role;
+  provider: AuthProviderType;
 }
 
 export function getTokens(): StoredAuth | null {
@@ -18,8 +21,9 @@ export function getTokens(): StoredAuth | null {
   const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
   const memberIdRaw = localStorage.getItem(MEMBER_ID_KEY);
   const role = localStorage.getItem(ROLE_KEY) as Role | null;
-  if (!accessToken || !refreshToken || !memberIdRaw || !role) return null;
-  return { accessToken, refreshToken, memberId: Number(memberIdRaw), role };
+  const provider = localStorage.getItem(PROVIDER_KEY) as AuthProviderType | null;
+  if (!accessToken || !refreshToken || !memberIdRaw || !role || !provider) return null;
+  return { accessToken, refreshToken, memberId: Number(memberIdRaw), role, provider };
 }
 
 type Listener = () => void;
@@ -40,6 +44,7 @@ export function setTokens(auth: StoredAuth): void {
   localStorage.setItem(REFRESH_TOKEN_KEY, auth.refreshToken);
   localStorage.setItem(MEMBER_ID_KEY, String(auth.memberId));
   localStorage.setItem(ROLE_KEY, auth.role);
+  localStorage.setItem(PROVIDER_KEY, auth.provider);
   notify();
 }
 
@@ -48,5 +53,6 @@ export function clearTokens(): void {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(MEMBER_ID_KEY);
   localStorage.removeItem(ROLE_KEY);
+  localStorage.removeItem(PROVIDER_KEY);
   notify();
 }
