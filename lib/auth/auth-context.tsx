@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import * as authApi from "@/lib/api/auth";
 import {
   clearTokens,
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [memberId, setMemberId] = useState<number | null>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [provider, setProvider] = useState<AuthProviderType | null>(null);
@@ -51,6 +53,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await authApi.login({ email, password });
+    // ["mySeller"]/["myDrops"]/["deposit-account"] 등 사용자별 데이터를 담는 쿼리 키에
+    // memberId가 안 들어가 있어서, 로그아웃 없이(또는 다른 브라우저 탭에서) 계정을 바꾸면
+    // 이전 사용자의 캐시가 새 사용자 화면에 그대로 보이는 문제가 있었다(2026-07-28 확인).
+    // 로그인마다 캐시를 통째로 비워 다음 fetch가 항상 새 사용자 기준으로 나가게 한다.
+    queryClient.clear();
     setTokens({
       accessToken: res.accessToken,
       refreshToken: res.refreshToken,
@@ -58,10 +65,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role: res.role,
       provider: "LOCAL",
     });
-  }, []);
+  }, [queryClient]);
 
   const loginWithGoogle = useCallback(async (idToken: string) => {
     const res = await authApi.oauthLogin("google", idToken);
+    queryClient.clear();
     setTokens({
       accessToken: res.accessToken,
       refreshToken: res.refreshToken,
@@ -83,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // role 보정에 실패해도 로그인 자체(기본값 CUSTOMER)는 유지한다
     }
-  }, []);
+  }, [queryClient]);
 
   const logout = useCallback(async () => {
     const stored = getTokens();
@@ -95,8 +103,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     clearTokens();
+    queryClient.clear();
     router.push("/login");
-  }, [router]);
+  }, [router, queryClient]);
 
   return (
     <AuthContext.Provider
