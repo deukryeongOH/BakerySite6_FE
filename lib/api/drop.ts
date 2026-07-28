@@ -20,10 +20,15 @@ export interface DropInfo {
  * 문서(docs/drop-api.md)상으로는 인증 불필요한 공개 조회 API지만, 실제 로컬 백엔드는
  * 토큰 없이 호출 시 403을 반환한다(2026-07-28 확인) — 문서와 실제 동작이 어긋나는 지점.
  * 이 앱은 (shop) 레이아웃 가드로 어차피 로그인 사용자만 접근하므로, apiRequest로
- * 있는 토큰을 그대로 실어 보낸다. 응답은 ApiResponse 래퍼 없이 최상위로 옴(unwrapped).
+ * 있는 토큰을 그대로 실어 보낸다.
+ *
+ * 문서는 이 응답이 ApiResponse 래퍼 없이 최상위로 온다고 적혀 있지만, 실제로는
+ * 다른 API와 동일하게 {success,data} 래퍼가 있다(2026-07-28 브라우저 검증으로 확인 —
+ * unwrapped:true로 파싱했더니 모든 필드가 undefined가 돼 드롭 카드가 조용히 안 그려지는
+ * 버그가 났었음). 그래서 여기선 unwrapped 옵션을 쓰지 않는다.
  */
 export function getDropInfo(dropId: number) {
-  return apiRequest<DropInfo>(`/api/v1/drops/${dropId}/info`, { unwrapped: true });
+  return apiRequest<DropInfo>(`/api/v1/drops/${dropId}/info`);
 }
 
 /** 오늘 진행하는 드롭의 ID. 오늘 드롭이 없으면 C003 404. (역시 실제로는 인증 필요) */

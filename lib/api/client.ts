@@ -38,12 +38,10 @@ interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   auth?: boolean;
-  /** 성공 응답이 {success,data} 래퍼 없이 최상위로 오는 특수 엔드포인트용(예: GET /drops/{id}/info). */
-  unwrapped?: boolean;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, auth = true, unwrapped = false } = options;
+  const { method = "GET", body, auth = true } = options;
 
   const send = (accessToken?: string) => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -78,15 +76,6 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (res.status === 204) return undefined as T;
-
-  if (unwrapped) {
-    if (!res.ok) {
-      const json = (await res.json().catch(() => null)) as ApiResponse<unknown> | null;
-      if (json && !json.success) throw new ApiException(json.error.code, json.error.message);
-      throw new ApiException("C001", "요청에 실패했습니다.");
-    }
-    return res.json() as Promise<T>;
-  }
 
   const json = (await res.json()) as ApiResponse<T>;
   if (!json.success) throw new ApiException(json.error.code, json.error.message);
