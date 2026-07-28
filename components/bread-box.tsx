@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { COLORS } from "@/lib/theme";
 
 export function BreadBox({
@@ -15,11 +14,12 @@ export function BreadBox({
   if (src) {
     return (
       <div className={`relative overflow-hidden ${className}`}>
-        <Image
+        {/* 백엔드/판매자가 자유 입력한 URL이라 도메인을 미리 알 수 없어 next/image 대신 일반 img를 씀. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={src}
           alt={label}
-          fill
-          className={`object-cover ${dim ? "brightness-50 grayscale" : ""}`}
+          className={`w-full h-full object-cover ${dim ? "brightness-50 grayscale" : ""}`}
         />
       </div>
     );
