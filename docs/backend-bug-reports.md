@@ -110,6 +110,31 @@
 - 실제: 다른 API와 동일하게 `{"success": true, "data": {...}}` 래퍼가 있음.
 - **영향:** 프론트가 처음에 이 문서를 믿고 래퍼 없는 파싱으로 구현했다가, 모든 필드가 `undefined`가 되면서 홈/드롭상세 화면이 **에러 메시지 하나 없이 조용히 빈 화면**으로 보이는 버그로 이어졌습니다(콘솔 에러도 없고 API 응답도 200이라 원인 파악에 시간이 걸림). 지금은 일반 파싱으로 고쳤습니다.
 
+### 6. 드롭 등록 "하루 1개 제한"이 판매자별이 아니라 플랫폼 전체 기준으로 동작함
+
+- **발견일:** 2026-07-28 (M6 브라우저 e2e 테스트 중 — seller01로 로그인해 2026-08-05에 드롭을 등록하려는데 `DR004`가 남. seller01은 그 날짜에 드롭이 없는데도 충돌이 나서 코드를 확인함. `DevSellerDropSeeder`가 seller08의 시드 드롭을 정확히 2026-08-05로 심어놨었음 — seller01과 무관한 다른 판매자의 드롭 때문에 막힌 것)
+- **관련 도메인:** drop (`docs/drop-api.md`, `docs/drop-api-2.md`)
+- **코드:** `DropService.java:86-100` (`validateOneDropPerDay`)
+  ```java
+  private void validateOneDropPerDay(Long sellerId, LocalDateTime dropStart) {
+      ...
+      // 91: 먼저 하루에 드롭은 한 번으로 제한되므로 먼저 검증
+      if (dropRepository.existsByDropStartBetween(startOfDay, endOfDay)) {      // 판매자 무관 — 전역 검사
+          throw new BusinessException(ErrorCode.DUPLICATE_DROP_DATE);
+      }
+
+      // 96: (확장성을 고려한 판매자 드롭 등록 제한 / 추후 하루에 드롭이 여러 개일 경우)
+      if (dropRepository.existsBySellerIdAndDropStartBetween(sellerId, startOfDay, endOfDay)) {  // 판매자별 검사
+          throw new BusinessException(ErrorCode.DUPLICATE_DROP_DATE);
+      }
+  }
+  ```
+  수정(`PATCH`)용 `validateOneDropPerDayExcludingSelf`(104-116번 줄)도 동일한 구조.
+- **증상:** 91번 줄의 전역 검사(`existsByDropStartBetween`, sellerId 없음)가 먼저 걸려서, **판매자 A가 특정 날짜에 등록하려 할 때 그 날짜에 판매자 B의 드롭이 이미 있어도 `DR004`로 막힙니다.** 96번 줄의 판매자별 검사(`existsBySellerIdAndDropStartBetween`)는 91번이 통과해야만 도달 가능한데, 91번이 통과했다는 건 이미 "그날 어떤 판매자의 드롭도 없다"는 뜻이라 96번은 현재 시점엔 도달할 수 없는 죽은 코드입니다.
+- **코드에 남은 의도 추정:** 96번 줄 주석("확장성을 고려한 판매자 드롭 등록 제한 / **추후** 하루에 드롭이 여러 개일 경우")을 보면, 원래 의도는 "판매자당 하루 1개"이고 91번의 전역 검사는 "현재는 플랫폼 전체에서도 하루 1개만 허용"하는 별개의 임시 제약으로 보입니다. 다만 이게 의도적인 임시 정책인지, 91번 줄을 지워야 하는데 못 지운 실수인지는 코드만으로는 판단이 안 됩니다.
+- **영향:** 프론트(홈 화면 "오늘의 드롭" 단일 카드, `GET /drops/today/drop`)는 이 전역 제약을 전제로 만들어져 있어서 지금 동작은 자연스럽게 맞물립니다. 다만 "판매자당 하루 1개"가 진짜 의도라면, 홈 화면이 여러 판매자의 드롭 중 하나만 보여주는 지금 UX(`/drops/today/drop`이 Long 하나만 반환)도 함께 재설계가 필요합니다 — 리스트 API로 바꿔야 함.
+- **확인 요청:** 91번 줄(플랫폼 전체 제한)이 의도된 정책인지, 아니면 96번 줄(판매자별 제한)만 남기고 91번은 제거해야 하는지 백엔드팀 확인 필요.
+
 ---
 
 ## 해결됨

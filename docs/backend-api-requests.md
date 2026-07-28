@@ -90,6 +90,59 @@
 
 ---
 
+### 3. 예정된 드롭 목록 조회 (날짜별)
+
+- **요청일:** 2026-07-28
+- **관련 도메인:** drop (`docs/drop-api.md`)
+- **배경:** 홈 화면은 지금 `GET /drops/today/drop`으로 "오늘의 드롭" 딱 하나만 보여줍니다. 사용자가 오늘 것 말고 앞으로 며칠간 어떤 드롭이 예정돼 있는지 미리 훑어보고 싶어 하는데, 날짜별로 여러 드롭을 한 번에 내려주는 조회 API가 없습니다. `GET /drops/mine`은 판매자 본인 것만 조회하는 인증 API라 고객용 화면에는 쓸 수 없고, `GET /drops/{dropId}/info`는 dropId를 이미 알아야 하는 단건 조회라 목록 화면의 대안이 되지 못합니다.
+- **요청:** 특정 기간(또는 기본값: 오늘부터 N일) 동안 `UPCOMING`/`ACTIVE` 상태인 드롭을 `dropStart` 오름차순으로 내려주는 공개(또는 로그인) 조회 API. `docs/backend-bug-reports.md` §6에 따르면 현재 하루에 드롭이 플랫폼 전체 기준 최대 1개라, 응답은 사실상 "날짜 하나당 드롭 카드 하나" 형태가 됩니다 — 그 제약이 나중에 판매자별로 바뀌면 같은 날짜에 여러 드롭이 올 수 있으니 그때는 프론트에서 날짜별로 그룹핑하는 처리가 필요합니다.
+- **호출 시점(예상):** 홈 화면 진입 시.
+- **통신 기본 규격(제안):**
+    - **Method:** `GET`
+    - **Path:** `/api/v1/drops/upcoming`
+    - Query: `days`(선택, 기본값 7 등 — 오늘부터 며칠치를 볼지)
+    - Header: `Authorization` Bearer 토큰 (⚠️ `docs/backend-bug-reports.md` §4에 따르면 `/today/drop`, `/{dropId}/info`도 문서상 "공개 API"라 적혀 있지만 실제로는 토큰 없이 403이 나므로, 이 API도 동일하게 인증이 필요할 가능성이 높음 — 구현 시 확인 필요)
+
+**요청 명세(제안)**
+
+| 구분 | 필드명 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- | --- |
+| Header | `Authorization` | String | Y(추정) | Bearer 토큰 |
+| Query | `days` | int | N | 오늘부터 조회할 일수. 생략 시 서버 기본값 |
+
+**응답 명세(제안)**
+
+- `200 OK` — `GET /drops/mine`(`DropProductInfoResponse`)과 같은 필드 구성의 배열. `dropStart` 오름차순 정렬.
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "dropId": 12,
+      "name": "버터떡",
+      "description": "버터를 많이 써서 향이 좋고 쫀득해요.",
+      "imageUrl": "https://cdn.openbake.com/drops/12.jpg",
+      "pickUpAvailableDates": ["2026-08-02", "2026-08-03"],
+      "dropStart": "2026-08-01T14:00:00",
+      "dropEnd": "2026-08-01T18:00:00",
+      "limitQuantity": 5,
+      "price": 3000,
+      "totalQuantity": 200,
+      "remainQuantity": 200,
+      "dropStatus": "UPCOMING"
+    }
+  ]
+}
+```
+
+**해결되면 프론트에서 할 일**
+
+- 홈 화면(`app/(shop)/page.tsx`)을 "오늘의 드롭 카드 1개"에서 "날짜 헤더 + 그 날짜의 드롭 카드" 리스트로 교체.
+- 기존 `GET /drops/today/drop` 단건 조회 로직은 그대로 두거나, 목록의 첫 항목(가장 가까운 날짜)으로 대체할지 결정.
+
+---
+
 ## 해결됨
 
 ### 1. 내 판매자 신청 조회
