@@ -1,6 +1,7 @@
 import { apiRequest } from "@/lib/api/client";
+import type { Role } from "@/lib/auth/token-storage";
 
-export type Role = "ADMIN" | "CUSTOMER";
+export type { Role };
 export type MemberStatus = "ACTIVE" | "SUSPENDED" | "WITHDRAWN";
 
 export interface SignupRequest {

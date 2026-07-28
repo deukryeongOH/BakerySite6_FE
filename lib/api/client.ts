@@ -20,6 +20,7 @@ async function reissueAccessToken(): Promise<string> {
         if (!json.success) throw new ApiException(json.error.code, json.error.message);
         setTokens({
           memberId: stored.memberId,
+          role: stored.role,
           accessToken: json.data.accessToken,
           refreshToken: json.data.refreshToken,
         });

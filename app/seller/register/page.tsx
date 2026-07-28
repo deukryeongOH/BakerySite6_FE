@@ -1,14 +1,307 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
+import * as sellerApi from "@/lib/api/seller";
+import { setSellerId } from "@/lib/seller/seller-storage";
+import { ApiException } from "@/lib/api/types";
+
+const inputClass = "w-full px-4 py-3 rounded-lg text-sm outline-none";
+const inputStyle = {
+  background: COLORS.surface,
+  color: COLORS.text,
+  border: `1px solid ${COLORS.border}`,
+};
+
+type Step = 1 | 2 | 3;
 
 export default function SellerRegisterPage() {
+  const router = useRouter();
+  const [step, setStep] = useState<Step>(1);
+
+  const [business, setBusiness] = useState({
+    businessNumber: "",
+    businessAddress: "",
+    businessRepresentativeName: "",
+  });
+
+  const [account, setAccount] = useState({ bankCode: "", accountNumber: "", accountHolder: "" });
+  const [verificationRequestId, setVerificationRequestId] = useState<string | null>(null);
+  const [mockCode, setMockCode] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState("");
+
+  const [bakeryName, setBakeryName] = useState("");
+
+  const verifyBusinessMutation = useMutation({
+    mutationFn: () => sellerApi.verifyBusiness(business),
+    onSuccess: (res) => {
+      if (res.verified) setStep(2);
+    },
+  });
+
+  const requestAccountMutation = useMutation({
+    mutationFn: () => sellerApi.requestAccountVerification(account),
+    onSuccess: (res) => {
+      setVerificationRequestId(res.verificationRequestId);
+      setMockCode(null);
+    },
+  });
+
+  const mockCodeMutation = useMutation({
+    mutationFn: () => sellerApi.getMockVerificationCode(verificationRequestId!),
+    onSuccess: (res) => setMockCode(res.code),
+  });
+
+  const verifyAccountMutation = useMutation({
+    mutationFn: () => sellerApi.verifyAccountCode(verificationRequestId!, verificationCode),
+    onSuccess: (res) => {
+      if (res.verified) setStep(3);
+    },
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: () =>
+      sellerApi.applySeller({
+        bakeryName,
+        businessNumber: business.businessNumber,
+        businessAddress: business.businessAddress,
+        businessRepresentativeName: business.businessRepresentativeName,
+      }),
+    onSuccess: (res) => {
+      setSellerId(res.sellerId);
+      router.push("/seller/dashboard");
+    },
+  });
+
+  function errorMessage(err: unknown, fallback: string) {
+    return err instanceof ApiException ? err.message : fallback;
+  }
+
+  function handleBusinessSubmit(e: FormEvent) {
+    e.preventDefault();
+    verifyBusinessMutation.mutate();
+  }
+
+  function handleAccountSubmit(e: FormEvent) {
+    e.preventDefault();
+    requestAccountMutation.mutate();
+  }
+
+  function handleVerifyCodeSubmit(e: FormEvent) {
+    e.preventDefault();
+    verifyAccountMutation.mutate();
+  }
+
+  function handleApplySubmit(e: FormEvent) {
+    e.preventDefault();
+    applyMutation.mutate();
+  }
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto" style={{ background: COLORS.bg }}>
-      <BackHeader title="드롭 등록" href="/seller/dashboard" />
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm" style={{ color: COLORS.muted }}>
-          이 화면은 아직 준비 중입니다
-        </p>
+      <BackHeader title="판매자 입점 신청" href="/seller/dashboard" />
+
+      <div className="px-4 py-4 flex items-center gap-2 flex-shrink-0">
+        {(["사업자 인증", "계좌 인증", "신청"] as const).map((label, i) => {
+          const n = (i + 1) as Step;
+          return (
+            <div key={label} className="flex-1 flex flex-col items-center gap-1">
+              <div
+                className="w-full h-1 rounded-full"
+                style={{ background: step >= n ? COLORS.accent : COLORS.border }}
+              />
+              <span
+                className="text-[11px]"
+                style={{ color: step >= n ? COLORS.accent : COLORS.muted }}
+              >
+                {label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex-1 px-4 pb-6 flex flex-col gap-4">
+        {step === 1 && (
+          <form onSubmit={handleBusinessSubmit} className="flex flex-col gap-3">
+            <input
+              required
+              placeholder="사업자등록번호 (123-45-67890)"
+              value={business.businessNumber}
+              onChange={(e) => setBusiness((b) => ({ ...b, businessNumber: e.target.value }))}
+              className={inputClass}
+              style={inputStyle}
+            />
+            <input
+              required
+              placeholder="사업장 주소"
+              value={business.businessAddress}
+              onChange={(e) => setBusiness((b) => ({ ...b, businessAddress: e.target.value }))}
+              className={inputClass}
+              style={inputStyle}
+            />
+            <input
+              required
+              placeholder="대표자명"
+              value={business.businessRepresentativeName}
+              onChange={(e) =>
+                setBusiness((b) => ({ ...b, businessRepresentativeName: e.target.value }))
+              }
+              className={inputClass}
+              style={inputStyle}
+            />
+            {verifyBusinessMutation.isError && (
+              <p className="text-xs" style={{ color: "#E0554F" }}>
+                {errorMessage(verifyBusinessMutation.error, "사업자 인증에 실패했습니다.")}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={verifyBusinessMutation.isPending}
+              className="w-full py-3.5 rounded-lg text-sm font-bold disabled:opacity-60"
+              style={{ background: COLORS.accent, color: COLORS.bg }}
+            >
+              {verifyBusinessMutation.isPending ? "인증 중..." : "인증"}
+            </button>
+          </form>
+        )}
+
+        {step === 2 && (
+          <div className="flex flex-col gap-4">
+            <form onSubmit={handleAccountSubmit} className="flex flex-col gap-3">
+              <input
+                required
+                placeholder="은행 코드 (예: 088)"
+                value={account.bankCode}
+                onChange={(e) => setAccount((a) => ({ ...a, bankCode: e.target.value }))}
+                className={inputClass}
+                style={inputStyle}
+              />
+              <input
+                required
+                placeholder="계좌번호 (숫자만, 10~14자리)"
+                value={account.accountNumber}
+                onChange={(e) => setAccount((a) => ({ ...a, accountNumber: e.target.value }))}
+                className={inputClass}
+                style={inputStyle}
+              />
+              <input
+                required
+                placeholder="예금주명"
+                value={account.accountHolder}
+                onChange={(e) => setAccount((a) => ({ ...a, accountHolder: e.target.value }))}
+                className={inputClass}
+                style={inputStyle}
+              />
+              {requestAccountMutation.isError && (
+                <p className="text-xs" style={{ color: "#E0554F" }}>
+                  {errorMessage(requestAccountMutation.error, "계좌 인증 요청에 실패했습니다.")}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={requestAccountMutation.isPending}
+                className="w-full py-3 rounded-lg text-sm font-semibold disabled:opacity-60"
+                style={{ background: COLORS.accentSoft, color: COLORS.accent }}
+              >
+                {requestAccountMutation.isPending ? "요청 중..." : "1원 송금 인증 요청"}
+              </button>
+            </form>
+
+            {verificationRequestId && (
+              <form
+                onSubmit={handleVerifyCodeSubmit}
+                className="flex flex-col gap-3 pt-3"
+                style={{ borderTop: `1px solid ${COLORS.border}` }}
+              >
+                <p className="text-xs" style={{ color: COLORS.muted }}>
+                  입금자명에 표시된 4자리 코드를 입력하세요.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => mockCodeMutation.mutate()}
+                  disabled={mockCodeMutation.isPending}
+                  className="text-xs text-left"
+                  style={{ color: COLORS.info }}
+                >
+                  [DEV] 목업 인증 코드 확인
+                </button>
+                {mockCode && (
+                  <p className="text-sm font-mono" style={{ color: COLORS.text }}>
+                    코드: {mockCode}
+                  </p>
+                )}
+                <input
+                  required
+                  placeholder="인증 코드 4자리"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  className={inputClass}
+                  style={inputStyle}
+                />
+                {verifyAccountMutation.isError && (
+                  <p className="text-xs" style={{ color: "#E0554F" }}>
+                    {errorMessage(verifyAccountMutation.error, "인증 코드가 일치하지 않습니다.")}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={verifyAccountMutation.isPending}
+                  className="w-full py-3.5 rounded-lg text-sm font-bold disabled:opacity-60"
+                  style={{ background: COLORS.accent, color: COLORS.bg }}
+                >
+                  {verifyAccountMutation.isPending ? "확인 중..." : "확인"}
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        {step === 3 && (
+          <form onSubmit={handleApplySubmit} className="flex flex-col gap-3">
+            <div
+              className="rounded-xl p-4 flex flex-col gap-1.5"
+              style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+            >
+              <p className="text-xs" style={{ color: COLORS.muted }}>
+                사업자등록번호
+              </p>
+              <p className="text-sm" style={{ color: COLORS.text }}>
+                {business.businessNumber}
+              </p>
+              <p className="text-xs mt-2" style={{ color: COLORS.muted }}>
+                사업장 주소
+              </p>
+              <p className="text-sm" style={{ color: COLORS.text }}>
+                {business.businessAddress}
+              </p>
+            </div>
+            <input
+              required
+              placeholder="베이커리 상호명"
+              value={bakeryName}
+              onChange={(e) => setBakeryName(e.target.value)}
+              className={inputClass}
+              style={inputStyle}
+            />
+            {applyMutation.isError && (
+              <p className="text-xs" style={{ color: "#E0554F" }}>
+                {errorMessage(applyMutation.error, "입점 신청에 실패했습니다.")}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={applyMutation.isPending}
+              className="w-full py-3.5 rounded-lg text-sm font-bold disabled:opacity-60"
+              style={{ background: COLORS.accent, color: COLORS.bg }}
+            >
+              {applyMutation.isPending ? "신청 중..." : "신청하기"}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

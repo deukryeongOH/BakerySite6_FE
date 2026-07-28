@@ -3,10 +3,18 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as authApi from "@/lib/api/auth";
-import { clearTokens, getTokens, setTokens, subscribeTokens } from "@/lib/auth/token-storage";
+import {
+  clearTokens,
+  getTokens,
+  setTokens,
+  subscribeTokens,
+  type Role,
+} from "@/lib/auth/token-storage";
+import { clearSellerId } from "@/lib/seller/seller-storage";
 
 interface AuthContextValue {
   memberId: number | null;
+  role: Role | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -18,6 +26,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [memberId, setMemberId] = useState<number | null>(null);
+  const [role, setRole] = useState<Role | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // localStorage는 서버에 없다. useSyncExternalStore의 getServerSnapshot(null)로
@@ -27,7 +36,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 2026-07-28 확인) 이 mount effect + 구독 방식으로 되돌렸다.
   useEffect(() => {
     function sync() {
-      setMemberId(getTokens()?.memberId ?? null);
+      const stored = getTokens();
+      setMemberId(stored?.memberId ?? null);
+      setRole(stored?.role ?? null);
       setIsLoading(false);
     }
     sync();
@@ -40,6 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       accessToken: res.accessToken,
       refreshToken: res.refreshToken,
       memberId: res.memberId,
+      role: res.role,
     });
   }, []);
 
@@ -53,12 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     clearTokens();
+    clearSellerId();
     router.push("/login");
   }, [router]);
 
   return (
     <AuthContext.Provider
-      value={{ memberId, isAuthenticated: memberId !== null, isLoading, login, logout }}
+      value={{ memberId, role, isAuthenticated: memberId !== null, isLoading, login, logout }}
     >
       {children}
     </AuthContext.Provider>

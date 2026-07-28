@@ -39,7 +39,7 @@
 ##### 1.1. 기본 정보
 
 - **설명:** 주문 도메인에서 발생한 구매확정 이벤트를 받아 정산 대상 원장(`SettlementTarget`)을 생성합니다.
-- **호출 시점:** 주문 상태가 구매확정으로 바뀌었을 때 (현재는 주문 도메인이 Outbox로 자동 호출하지 않고, 이 API를 수동/테스트 호출하는 상태 — `OrderService.confirm()`에 `TODO(settlement): 구매확정 Outbox 이벤트 발행` 주석만 있고 실제 호출 코드는 없습니다)
+- **호출 시점:** ⚠️ **2026-07-28 갱신:** 주문 상태가 구매확정으로 바뀌면 이제 실제로 정산 대상이 생성되지만, **이 HTTP 엔드포인트를 거치지 않습니다.** `OrderService.confirm()`(수동/자동 확정 공통)이 `PurchaseConfirmedEvent`를 Spring `ApplicationEventPublisher`로 발행하고, `PurchaseConfirmedEventListener`가 `AFTER_COMMIT` 시점에 별도 트랜잭션에서 `SettlementEventService.receive()`를 **인프로세스로 직접 호출**합니다. 즉 이 `POST /internal/v1/...` API는 주문→정산 자동 연동 경로에서 실제로 쓰이지 않고, 외부에서 수동/테스트 호출하는 용도로만 남아있습니다(둘 다 결국 같은 `SettlementEventService.receive()`를 타므로 동작은 동일).
 - **통신 기본 규격:**
     - **Method:** POST
     - **Path:** `/internal/v1/settlement-events/purchase-confirmed`

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { COLORS } from "@/lib/theme";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -10,7 +11,7 @@ import { ApiException } from "@/lib/api/types";
 const inputClass = "w-full px-4 py-2.5 rounded-lg text-sm outline-none";
 
 export default function MyPage() {
-  const { memberId, logout } = useAuth();
+  const { memberId, role, logout } = useAuth();
   const queryClient = useQueryClient();
 
   const memberQuery = useQuery({
@@ -228,6 +229,23 @@ export default function MyPage() {
             </button>
           </form>
         </div>
+
+        <Link
+          href="/seller/dashboard"
+          className="w-full py-3 rounded-lg text-sm text-center"
+          style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
+        >
+          판매자 입점 신청
+        </Link>
+        {role === "ADMIN" && (
+          <Link
+            href="/admin/approvals"
+            className="w-full py-3 rounded-lg text-sm text-center"
+            style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
+          >
+            판매자 승인 관리
+          </Link>
+        )}
 
         <button
           onClick={() => logout()}
