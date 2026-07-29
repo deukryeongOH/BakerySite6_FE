@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
@@ -11,6 +12,12 @@ import { ApiException } from "@/lib/api/types";
 const AMOUNTS = [10000, 30000, 50000, 100000];
 
 export default function ChargePage() {
+  const searchParams = useSearchParams();
+  // 드롭 구매 중 잔액 부족으로 넘어온 경우, 충전 완료 후 원래 화면(주문 페이지)으로
+  // 돌아갈 수 있도록 success/fail 페이지까지 계속 들고 다닌다.
+  const returnTo = searchParams.get("returnTo");
+  const returnToQuery = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
+
   const [selected, setSelected] = useState(50000);
   const [custom, setCustom] = useState("");
   const finalAmount = custom ? parseInt(custom) || 0 : selected;
@@ -30,13 +37,13 @@ export default function ChargePage() {
         amount: charge.amount,
         orderId: charge.pgOrderId,
         orderName: charge.orderName,
-        successUrl: `${window.location.origin}/wallet/charge/success`,
-        failUrl: `${window.location.origin}/wallet/charge/fail`,
+        successUrl: `${window.location.origin}/wallet/charge/success${returnToQuery}`,
+        failUrl: `${window.location.origin}/wallet/charge/fail${returnToQuery}`,
       });
     },
   });
 
-  const disabled = finalAmount <= 0 || accountQuery.data?.hasChargeInProgress === true;
+  const disabled = finalAmount <= 0;
 
   function errorMessage(err: unknown) {
     if (err instanceof ApiException) return err.message;
@@ -61,8 +68,15 @@ export default function ChargePage() {
         </div>
 
         {accountQuery.data?.hasChargeInProgress && (
+          /**
+           * 정보성 안내일 뿐 버튼을 막지 않는다 — 백엔드 ChargeService.createChargeRequest는
+           * 결제창을 안 끝낸 기존 READY 건을 새 요청 전에 자동 만료시키고, IN_PROGRESS는
+           * 의도적으로 차단하지 않는다(이중 적립은 락+원장 유니크가 별도로 막음). 예전엔 이걸
+           * 근거로 버튼을 disabled 처리했는데, 그러면 정작 재시도로 풀리는 케이스까지
+           * 사용자가 영구히 못 벗어나는 상태로 보여서(실제로 재현됨) 제거함.
+           */
           <p className="text-xs mb-4" style={{ color: COLORS.info }}>
-            진행 중인 충전 건이 있어 새 충전을 시작할 수 없습니다.
+            이전에 완료되지 않은 충전 요청이 있어요. 계속 진행하면 새로 요청됩니다.
           </p>
         )}
 
