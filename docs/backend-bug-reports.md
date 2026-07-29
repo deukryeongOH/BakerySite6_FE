@@ -94,6 +94,51 @@
   ```
 - **⚠️ 참고:** 이건 코드 버그가 아니라 로컬 DB에만 있는 스키마 드리프트라, 다른 팀원의 로컬 DB나 배포 환경에도 같은 문제가 있는지 확인이 필요합니다. Flyway/Liquibase 같은 정식 마이그레이션 도구가 없어서(`ddl-auto: update` 사용 중) 이런 드리프트가 재발할 수 있음 — 다른 enum 컬럼들(order_state, application_status 등)도 같은 문제가 있는지 점검해볼 가치가 있습니다.
 
+### 4. 인증 실패(만료/누락/위조 토큰) 응답에 CORS 헤더가 안 붙어서 브라우저가 응답을 통째로 차단함
+
+- **발견일:** 2026-07-29
+- **관련 도메인:** 공통 (member-auth, `SecurityConfig`) — 인증이 필요한 모든 엔드포인트에 해당하는 광범위한 문제
+- **증상:** 드롭 대기열 진입(`POST /drops/{id}/enter`) 등 인증이 필요한 API를, accessToken이 만료된 채로(로그인 후 30분 경과) 브라우저에서 호출하면 화면에 "대기열 진입에 실패했습니다" 같은 원인 불명의 fallback 문구만 뜬다. 브라우저 콘솔에는 다음 에러가 남는다:
+  ```
+  Access to fetch at 'http://localhost:8080/api/v1/drops/2/enter' from origin 'http://localhost:3000'
+  has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+  ```
+  `curl`로 같은 요청을 보내면 CORS가 적용되지 않아 정상적으로 응답이 오므로(바디는 비어 있는 `403`, `Content-Length: 0`) 이 문제는 브라우저에서만 재현되고 curl 테스트만으로는 놓치기 쉽다.
+- **재현:**
+  ```bash
+  # 만료/위조 토큰으로 인증 필요 API 호출 → 바디 없는 403 (curl은 CORS를 안 지켜서 응답은 옴)
+  curl -i -X POST http://localhost:8080/api/v1/drops/2/enter \
+    -H "Authorization: Bearer invalid.token.value" -H "Content-Type: application/json" -d '{}'
+  # → HTTP/1.1 403, Content-Length: 0, Vary:Origin 헤더 없음
+
+  # 반면 유효한 토큰으로 호출하면 Vary: Origin 등 CORS 관련 헤더가 붙어서 내려옴 (비교용)
+  ```
+  실제 브라우저(Chromium)로 같은 시나리오를 재현하면 요청 자체가 `net::ERR_FAILED`로 실패하고 응답이 JS에 전달되지 않는다.
+- **원인:** CORS는 `WebConfig`(`WebMvcConfigurer.addCorsMappings`)에만 설정돼 있는데, 이건 Spring MVC의 `DispatcherServlet`까지 요청이 도달해야 적용되는 레벨이다. 반면 `SecurityConfig.filterChain()`은 `.cors(...)`를 전혀 호출하지 않는다. 그래서 JWT가 없거나 만료/위조된 요청은 `anyRequest().authenticated()`에 걸려 `DispatcherServlet`에 도달하기도 전에 Security 필터 체인(`ExceptionTranslationFilter`)에서 바로 거부되는데, 이 경로는 MVC의 CORS 설정을 거치지 않으므로 응답에 `Access-Control-Allow-Origin`이 붙지 않는다. 브라우저는 CORS 헤더 없는 cross-origin 응답을 스크립트에서 읽지 못하게 막아버리므로, 프론트 입장에선 응답 상태 코드나 바디를 전혀 볼 수 없는 순수 네트워크 에러(`fetch()` reject)로만 관측된다.
+  - 부가적으로, 설령 CORS를 통과하더라도 이 거부 응답은 `GlobalExceptionHandler`(Spring MVC `@RestControllerAdvice`)를 거치지 않으므로 앱 전역 규칙인 `{success:false, error:{code,message}}` envelope도 안 붙는다(바디가 아예 빔, `Content-Length: 0`) — `docs/*-api.md` 문서에 나온 에러 포맷 규칙에서 벗어나는 유일한 경로다.
+- **권장 수정 (로컬 코드 수정은 적용하지 않음 — 이 저장소는 백엔드 코드를 직접 건드리지 않는다는 원칙이라, 백엔드팀이 반영):**
+
+  `SecurityConfig.java`의 `filterChain()`에 `.cors(Customizer.withDefaults())`를 추가하고, `WebConfig`의 `addCorsMappings`와 동일한 origin/method/header 설정을 담은 `CorsConfigurationSource` 빈을 등록해야 한다(Spring Security의 `.cors()`는 `WebMvcConfigurer.addCorsMappings`를 자동으로 읽어오지 않고, 별도의 `CorsConfigurationSource` 빈이 필요함). 예:
+  ```java
+  http
+      .cors(Customizer.withDefaults())
+      .csrf(AbstractHttpConfigurer::disable)
+      ...
+
+  @Bean
+  public CorsConfigurationSource corsConfigurationSource() {
+      CorsConfiguration config = new CorsConfiguration();
+      config.setAllowedOrigins(List.of(
+          "https://bakery-site6-fe.vercel.app", "http://localhost:3000", "http://localhost:5173"));
+      config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+      config.setAllowedHeaders(List.of("*"));
+      UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+      source.registerCorsConfiguration("/api/**", config);
+      return source;
+  }
+  ```
+- **프론트 임시 우회(2026-07-29 적용, `lib/api/client.ts`):** accessToken을 실제로 보내기 전에 JWT의 `exp` claim을 클라이언트에서 미리 디코딩해 만료 여부를 확인하고, 만료됐으면 요청을 보내기 전에 `reissueAccessToken()`으로 먼저 갱신한다 — 이러면 만료된 토큰이 애초에 서버로 나가질 않으니 이 CORS 차단 경로 자체를 타지 않는다. 다만 이건 "자연스러운 만료"만 회피할 뿐, 서명이 위조됐거나 서버에서 블랙리스트된 토큰처럼 `exp`는 아직 안 지났지만 백엔드가 거부하는 경우는 여전히 이 버그의 영향을 받는다(그런 요청은 여전히 원인 불명의 fallback 에러로 보일 것) — 근본 수정은 위 백엔드 CORS 연동뿐이다.
+
 ---
 
 ## 문서-실제 동작 불일치 (버그는 아니지만 `docs/drop-api.md` 수정 필요)
