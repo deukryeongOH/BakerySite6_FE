@@ -141,32 +141,6 @@
 
 ---
 
-### 5. `/internal/v1/**`(정산 관리자 API)에 CORS 설정 자체가 없어 브라우저에서 전부 차단됨
-
-- **발견일:** 2026-07-29
-- **관련 도메인:** settlement (공통 `WebConfig`) — `/internal/v1/**` 전체에 해당
-- **증상:** `/admin/settlements` 화면에서 정산 배치 목록 조회(`GET /internal/v1/settlement-batches`), 배치 실행(`POST /internal/v1/settlement-batches/monthly`) 등을 브라우저에서 호출하면 전부 CORS 에러로 실패한다. 콘솔:
-  ```
-  Access to fetch at 'http://localhost:8080/internal/v1/settlement-batches?page=0&size=20' from origin
-  'http://localhost:3000' has been blocked by CORS policy: Response to preflight request doesn't pass
-  access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
-  ```
-  이때 백엔드 로그에는 아무것도 찍히지 않는다 — 요청이 컨트롤러는커녕 Security 필터체인에도 도달하지 못하고 preflight(OPTIONS) 단계에서 그대로 막힌다. `curl`은 CORS를 신경 쓰지 않으므로 이 문제는 브라우저에서만 재현되고(§4와 동일한 특징) `curl`로는 실제 admin 토큰을 넣어도 정상 응답이 온다(§4처럼 curl 테스트만으로는 놓치기 쉬움).
-- **원인:** `WebConfig.addCorsMappings`가 `/api/**`에만 CORS를 등록한다(위 §4 코드 인용 참고). `/internal/v1/**`은 이 패턴에 안 걸려서, 해당 경로는 인증 성공/실패 여부와 무관하게 **CORS 설정 자체가 없는 상태**다. §4는 "인증 실패 응답"에 한정된 문제(Security 필터체인이 MVC CORS 레벨보다 먼저 요청을 거부)인 반면, 이건 그보다 앞선 문제 — 경로 패턴 자체가 등록되지 않아 성공 케이스도 포함해 전부 막힌다.
-- **권장 수정 (로컬 코드 수정은 적용하지 않음 — 백엔드팀이 반영):** `WebConfig.java`에 `/internal/**` 매핑 추가.
-  ```java
-  registry.addMapping("/internal/**")
-          .allowedOrigins(
-                  "https://bakery-site6-fe.vercel.app",
-                  "http://localhost:3000",
-                  "http://localhost:5173")
-          .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-          .allowedHeaders("*");
-  ```
-  위 §4에서 제안한 `CorsConfigurationSource` 빈 방식으로 통합해 `/api/**`·`/internal/**` 둘 다 등록하고 `SecurityConfig`에 `.cors(Customizer.withDefaults())`를 연동하는 쪽이 더 근본적인 해결책 — 그러면 §4와 이 항목이 한 번에 같이 해결됨.
-
----
-
 ## 문서-실제 동작 불일치 (버그는 아니지만 `docs/drop-api.md` 수정 필요)
 
 ### 4. `GET /drops/{id}/info`, `GET /drops/today/drop` 인증 요구사항
@@ -210,4 +184,20 @@
 
 ## 해결됨
 
-(아직 없음)
+### `/internal/v1/**`(정산 관리자 API)에 CORS 설정 자체가 없어 브라우저에서 전부 차단됨
+
+- **발견일:** 2026-07-29 / **해결일:** 2026-07-29
+- **관련 도메인:** settlement (공통 `WebConfig`) — `/internal/v1/**` 전체에 해당
+- **증상:** `/admin/settlements` 화면에서 정산 배치 목록 조회, 배치 실행 등을 브라우저에서 호출하면 preflight(OPTIONS) 단계에서 CORS 에러로 전부 실패. `curl`은 CORS를 신경 쓰지 않아 이 문제를 놓치기 쉬움(§4와 동일한 특징).
+- **원인:** `WebConfig.addCorsMappings`가 `/api/**`에만 CORS를 등록해서 `/internal/v1/**`은 경로 패턴 자체가 안 걸려있었음.
+- **수정 완료:** `WebConfig.java`에 `/internal/**` 매핑 추가(`/api/**`와 동일한 origin/method/header 설정).
+- **검증(2026-07-29):** 실행 중인 서버에 브라우저 preflight를 재현하는 요청을 직접 보내 확인함.
+  ```bash
+  curl -i -X OPTIONS "http://localhost:8080/internal/v1/settlement-batches?page=0&size=20" \
+    -H "Origin: http://localhost:3000" \
+    -H "Access-Control-Request-Method: GET" \
+    -H "Access-Control-Request-Headers: authorization,content-type"
+  # → HTTP/1.1 200, Access-Control-Allow-Origin: http://localhost:3000,
+  #   Access-Control-Allow-Methods: GET,POST,PUT,PATCH,DELETE,OPTIONS 확인
+  ```
+- **프론트 반영:** 별도 작업 불필요 — 프론트 코드는 CORS 우회 로직 없이 그냥 fetch만 하므로, 백엔드 수정만으로 `/admin/settlements` 지급 관리 탭이 브라우저에서 정상 동작함.
