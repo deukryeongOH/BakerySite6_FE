@@ -8,6 +8,7 @@ import { COLORS } from "@/lib/theme";
 import * as sellerApi from "@/lib/api/seller";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ApiException } from "@/lib/api/types";
+import { BANK_CODE_LABEL, BANK_CODES } from "@/lib/bank";
 
 const inputClass = "w-full px-4 py-3 rounded-lg text-sm outline-none";
 const inputStyle = {
@@ -189,14 +190,22 @@ export default function SellerRegisterPage() {
         {step === 2 && (
           <div className="flex flex-col gap-4">
             <form onSubmit={handleAccountSubmit} className="flex flex-col gap-3">
-              <input
+              <select
                 required
-                placeholder="은행 코드 (예: 088)"
                 value={account.bankCode}
                 onChange={(e) => setAccount((a) => ({ ...a, bankCode: e.target.value }))}
                 className={inputClass}
                 style={inputStyle}
-              />
+              >
+                <option value="" disabled>
+                  은행 선택
+                </option>
+                {BANK_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {BANK_CODE_LABEL[code]}
+                  </option>
+                ))}
+              </select>
               <input
                 required
                 placeholder="계좌번호 (숫자만, 10~14자리)"

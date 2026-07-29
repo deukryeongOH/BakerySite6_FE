@@ -268,6 +268,15 @@ export default function MyPage() {
             판매자 승인 관리
           </Link>
         )}
+        {role === "ADMIN" && (
+          <Link
+            href="/admin/settlements"
+            className="w-full py-3 rounded-lg text-sm text-center"
+            style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
+          >
+            정산 관리
+          </Link>
+        )}
 
         <button
           onClick={() => logout()}

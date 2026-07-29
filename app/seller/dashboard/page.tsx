@@ -9,6 +9,7 @@ import * as sellerApi from "@/lib/api/seller";
 import * as dropApi from "@/lib/api/drop";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtDateTime } from "@/lib/format";
+import { getBankName } from "@/lib/bank";
 import { ApiException } from "@/lib/api/types";
 import type { ApplicationStatus } from "@/lib/api/seller";
 import type { DropApiStatus } from "@/lib/api/drop";
@@ -131,7 +132,7 @@ export default function SellerDashboardPage() {
               사업자등록번호 {seller.businessNumber}
             </p>
             <p className="text-xs" style={{ color: COLORS.muted }}>
-              정산 계좌 {seller.settlementBankCode} {seller.settlementAccountNumberMasked}
+              정산 계좌 {getBankName(seller.settlementBankCode)} {seller.settlementAccountNumberMasked}
               {seller.accountVerified ? " (인증됨)" : " (미인증)"}
             </p>
             {seller.applicationStatus === "REJECTED" && seller.rejectReason && (
@@ -143,6 +144,16 @@ export default function SellerDashboardPage() {
               </p>
             )}
           </div>
+        )}
+
+        {isApproved && (
+          <Link
+            href="/seller/settlements"
+            className="w-full py-3 rounded-lg text-sm text-center"
+            style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
+          >
+            내 정산
+          </Link>
         )}
 
         {isApproved && (

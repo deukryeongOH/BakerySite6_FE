@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as sellerApi from "@/lib/api/seller";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ApiException } from "@/lib/api/types";
+import { getBankName } from "@/lib/bank";
 
 const inputStyle = {
   background: COLORS.surface,
@@ -16,20 +16,10 @@ const inputStyle = {
 };
 
 export default function AdminApprovalsPage() {
-  const router = useRouter();
-  const { isAuthenticated, isLoading, role } = useAuth();
+  const { isAuthenticated, role } = useAuth();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-
-  useEffect(() => {
-    if (isLoading) return;
-    if (!isAuthenticated) {
-      router.replace("/login");
-    } else if (role !== "ADMIN") {
-      router.replace("/");
-    }
-  }, [isLoading, isAuthenticated, role, router]);
 
   const pendingQuery = useQuery({
     queryKey: ["sellers", "pending"],
@@ -46,8 +36,6 @@ export default function AdminApprovalsPage() {
       setRejectReason("");
     },
   });
-
-  if (isLoading || !isAuthenticated || role !== "ADMIN") return null;
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto" style={{ background: COLORS.bg }}>
@@ -100,7 +88,7 @@ export default function AdminApprovalsPage() {
                     사업자등록번호 {seller.businessNumber}
                   </span>
                   <span className="text-xs" style={{ color: COLORS.muted }}>
-                    정산 계좌 {seller.settlementBankCode} {seller.settlementAccountNumberMasked}
+                    정산 계좌 {getBankName(seller.settlementBankCode)} {seller.settlementAccountNumberMasked}
                     {seller.accountVerified ? " (인증됨)" : " (미인증)"}
                   </span>
                 </div>
