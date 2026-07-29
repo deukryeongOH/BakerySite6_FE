@@ -130,3 +130,10 @@ export interface MySeller extends Seller {
 export function getMySeller() {
   return apiRequest<MySeller>("/api/v1/sellers/me");
 }
+
+/** 입점 신청 상태로 필터링된 판매자 목록 조회 (admin 전용). 생략 시 PENDING만 반환. */
+export function getPendingSellers(applicationStatus: ApplicationStatus = "PENDING") {
+  return apiRequest<MySeller[]>(
+    `/api/v1/sellers?applicationStatus=${applicationStatus}`,
+  );
+}
