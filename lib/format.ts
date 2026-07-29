@@ -25,3 +25,18 @@ export function getDDay(dateStr: string, now: Date = new Date()): number {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
+
+/** start~end(YYYY-MM-DD, 둘 다 포함) 사이의 모든 날짜를 오름차순으로 나열. 값이 비었거나 end가 start보다 이르면 빈 배열. */
+export function expandDateRange(start: string, end: string): string[] {
+  if (!start || !end) return [];
+  const startDate = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  if (endDate < startDate) return [];
+  const dates: string[] = [];
+  for (const d = startDate; d <= endDate; d.setDate(d.getDate() + 1)) {
+    dates.push(
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    );
+  }
+  return dates;
+}

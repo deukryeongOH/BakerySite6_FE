@@ -7,6 +7,7 @@ import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as dropApi from "@/lib/api/drop";
 import { ApiException } from "@/lib/api/types";
+import { expandDateRange } from "@/lib/format";
 
 const inputClass = "w-full px-4 py-3 rounded-lg text-sm outline-none";
 const inputStyle = {
@@ -43,7 +44,9 @@ export default function EditDropPage() {
     dropStart: "",
     dropEnd: "",
   });
-  const [pickupDates, setPickupDates] = useState<string[]>([""]);
+  const [pickupStart, setPickupStart] = useState("");
+  const [pickupEnd, setPickupEnd] = useState("");
+  const pickupDates = expandDateRange(pickupStart, pickupEnd);
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
@@ -59,24 +62,16 @@ export default function EditDropPage() {
           dropStart: toDatetimeLocal(drop.dropStart),
           dropEnd: toDatetimeLocal(drop.dropEnd),
         });
-        setPickupDates(drop.pickUpAvailableDates.length > 0 ? drop.pickUpAvailableDates : [""]);
+        // 기존 데이터가 예전 방식(개별 날짜, 사이 날짜가 빠질 수 있음)으로 등록됐을 수 있어
+        // 최솟값~최댓값을 범위로 되돌린다 — 저장 시 그 사이 모든 날짜로 다시 채워진다.
+        const existing = [...drop.pickUpAvailableDates].sort();
+        setPickupStart(existing[0] ?? "");
+        setPickupEnd(existing[existing.length - 1] ?? "");
         setInitialized(true);
       }
     }
     sync();
   }, [drop, initialized]);
-
-  function updatePickupDate(i: number, value: string) {
-    setPickupDates((dates) => dates.map((d, idx) => (idx === i ? value : d)));
-  }
-
-  function addPickupDate() {
-    setPickupDates((dates) => [...dates, ""]);
-  }
-
-  function removePickupDate(i: number) {
-    setPickupDates((dates) => dates.filter((_, idx) => idx !== i));
-  }
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -84,7 +79,7 @@ export default function EditDropPage() {
         name: form.name,
         description: form.description,
         imageUrl: form.imageUrl,
-        pickUpAvailableDates: pickupDates.filter((d) => d !== ""),
+        pickUpAvailableDates: pickupDates,
         dropStart: `${form.dropStart}:00`,
         dropEnd: `${form.dropEnd}:00`,
         limitQuantity: Number(form.limitQuantity),
@@ -210,38 +205,34 @@ export default function EditDropPage() {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs" style={{ color: COLORS.muted }}>
-              픽업 가능 날짜 (드롭 마감일 이후여야 함)
+              픽업 가능 기간 (드롭 마감일 이후여야 함)
             </label>
-            {pickupDates.map((date, i) => (
-              <div key={i} className="flex gap-2">
-                <input
-                  required
-                  type="date"
-                  value={date}
-                  onChange={(e) => updatePickupDate(i, e.target.value)}
-                  className={inputClass}
-                  style={inputStyle}
-                />
-                {pickupDates.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removePickupDate(i)}
-                    className="px-3 rounded-lg text-sm"
-                    style={{ border: `1px solid ${COLORS.border}`, color: COLORS.muted }}
-                  >
-                    삭제
-                  </button>
-                )}
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addPickupDate}
-              className="text-xs text-left font-semibold"
-              style={{ color: COLORS.accent }}
-            >
-              + 날짜 추가
-            </button>
+            <div className="flex gap-2 items-center">
+              <input
+                required
+                type="date"
+                value={pickupStart}
+                onChange={(e) => setPickupStart(e.target.value)}
+                className={inputClass}
+                style={inputStyle}
+              />
+              <span className="text-xs" style={{ color: COLORS.muted }}>
+                ~
+              </span>
+              <input
+                required
+                type="date"
+                value={pickupEnd}
+                onChange={(e) => setPickupEnd(e.target.value)}
+                className={inputClass}
+                style={inputStyle}
+              />
+            </div>
+            <p className="text-xs" style={{ color: COLORS.muted }}>
+              {pickupDates.length > 0
+                ? `${pickupDates.length}일간(${pickupDates[0]} ~ ${pickupDates[pickupDates.length - 1]}) 매일 픽업 가능`
+                : "종료일이 시작일보다 빠를 수 없습니다."}
+            </p>
           </div>
 
           {updateMutation.isError && (
@@ -254,7 +245,7 @@ export default function EditDropPage() {
 
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={updateMutation.isPending || pickupDates.length === 0}
             className="w-full py-3.5 rounded-lg text-sm font-bold disabled:opacity-60"
             style={{ background: COLORS.accent, color: COLORS.bg }}
           >

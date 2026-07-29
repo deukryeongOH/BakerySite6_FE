@@ -9,6 +9,7 @@ import * as dropApi from "@/lib/api/drop";
 import * as sellerApi from "@/lib/api/seller";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ApiException } from "@/lib/api/types";
+import { expandDateRange } from "@/lib/format";
 
 const inputClass = "w-full px-4 py-3 rounded-lg text-sm outline-none";
 const inputStyle = {
@@ -50,19 +51,9 @@ export default function NewDropPage() {
     dropPeriodStart: "",
     dropPeriodEnd: "",
   });
-  const [pickupDates, setPickupDates] = useState<string[]>([""]);
-
-  function updatePickupDate(i: number, value: string) {
-    setPickupDates((dates) => dates.map((d, idx) => (idx === i ? value : d)));
-  }
-
-  function addPickupDate() {
-    setPickupDates((dates) => [...dates, ""]);
-  }
-
-  function removePickupDate(i: number) {
-    setPickupDates((dates) => dates.filter((_, idx) => idx !== i));
-  }
+  const [pickupStart, setPickupStart] = useState("");
+  const [pickupEnd, setPickupEnd] = useState("");
+  const pickupDates = expandDateRange(pickupStart, pickupEnd);
 
   const registerMutation = useMutation({
     mutationFn: () =>
@@ -70,7 +61,7 @@ export default function NewDropPage() {
         name: form.name,
         description: form.description,
         imageUrl: form.imageUrl,
-        pickUpAvailableDates: pickupDates.filter((d) => d !== ""),
+        pickUpAvailableDates: pickupDates,
         dropStart: `${form.dropPeriodStart}:00`,
         dropEnd: `${form.dropPeriodEnd}:00`,
         limitQuantity: Number(form.limitQuantity),
@@ -181,38 +172,34 @@ export default function NewDropPage() {
 
         <div className="flex flex-col gap-1.5">
           <label className="text-xs" style={{ color: COLORS.muted }}>
-            픽업 가능 날짜 (드롭 마감일 이후여야 함)
+            픽업 가능 기간 (드롭 마감일 이후여야 함)
           </label>
-          {pickupDates.map((date, i) => (
-            <div key={i} className="flex gap-2">
-              <input
-                required
-                type="date"
-                value={date}
-                onChange={(e) => updatePickupDate(i, e.target.value)}
-                className={inputClass}
-                style={inputStyle}
-              />
-              {pickupDates.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removePickupDate(i)}
-                  className="px-3 rounded-lg text-sm"
-                  style={{ border: `1px solid ${COLORS.border}`, color: COLORS.muted }}
-                >
-                  삭제
-                </button>
-              )}
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={addPickupDate}
-            className="text-xs text-left font-semibold"
-            style={{ color: COLORS.accent }}
-          >
-            + 날짜 추가
-          </button>
+          <div className="flex gap-2 items-center">
+            <input
+              required
+              type="date"
+              value={pickupStart}
+              onChange={(e) => setPickupStart(e.target.value)}
+              className={inputClass}
+              style={inputStyle}
+            />
+            <span className="text-xs" style={{ color: COLORS.muted }}>
+              ~
+            </span>
+            <input
+              required
+              type="date"
+              value={pickupEnd}
+              onChange={(e) => setPickupEnd(e.target.value)}
+              className={inputClass}
+              style={inputStyle}
+            />
+          </div>
+          <p className="text-xs" style={{ color: COLORS.muted }}>
+            {pickupDates.length > 0
+              ? `${pickupDates.length}일간(${pickupDates[0]} ~ ${pickupDates[pickupDates.length - 1]}) 매일 픽업 가능`
+              : "종료일이 시작일보다 빠를 수 없습니다."}
+          </p>
         </div>
 
         {registerMutation.isError && (
@@ -225,7 +212,7 @@ export default function NewDropPage() {
 
         <button
           type="submit"
-          disabled={registerMutation.isPending}
+          disabled={registerMutation.isPending || pickupDates.length === 0}
           className="w-full py-3.5 rounded-lg text-sm font-bold disabled:opacity-60"
           style={{ background: COLORS.accent, color: COLORS.bg }}
         >
