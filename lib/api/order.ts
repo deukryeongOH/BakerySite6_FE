@@ -55,7 +55,7 @@ export function getOrders(params: GetOrdersParams = {}) {
 export interface OrderDetail {
   orderId: number;
   orderState: OrderState;
-  totalAmount: number;
+  /** ⚠️ 백엔드 OrderDetailResponse에 totalAmount 필드가 없음 — orderItem.price * quantity로 계산해야 함. */
   orderItem: { dropId: number; dropName: string; price: number; quantity: number };
   seller: { sellerId: number; sellerName: string | null };
   pickupDate: string;

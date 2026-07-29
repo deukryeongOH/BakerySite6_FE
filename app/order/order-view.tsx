@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Minus, Plus } from "lucide-react";
+import { Check } from "lucide-react";
 import { COLORS } from "@/lib/theme";
 import { BreadBox } from "@/components/bread-box";
 import * as dropApi from "@/lib/api/drop";
@@ -31,22 +31,52 @@ export function OrderView() {
   });
 
   const drop = dropQuery.data;
-  const maxQty = drop ? Math.max(1, Math.min(drop.limitQuantity, drop.remainQuantity)) : 1;
-  const [qty, setQty] = useState(1);
-  const [pickupDate, setPickupDate] = useState<string | null>(null);
-  // 사용자가 아직 고르지 않았으면 첫 번째 픽업 가능일을 기본값으로 취급한다(effect 없이 렌더 중 파생).
-  const effectivePickupDate = pickupDate ?? drop?.pickupDates[0] ?? null;
+  // 수량/픽업일은 드롭 상세 페이지에서 대기열 진입 전에 이미 골라서 쿼리로 넘어온다.
+  // 직접 URL로 들어오는 등 값이 없는 경우를 대비해 안전한 기본값으로 보정한다.
+  const qtyParam = Number(searchParams.get("qty"));
+  const qty = Number.isFinite(qtyParam) && qtyParam > 0 ? qtyParam : 1;
+  // 백엔드가 Set<LocalDate>로 내려줘서 순서가 보장 안 됨 — ISO 날짜 문자열이라 그냥 정렬하면 된다.
+  const pickupDate = searchParams.get("pickupDate") ?? [...(drop?.pickupDates ?? [])].sort()[0] ?? null;
 
+  // 재고 선점(lock-start)·장바구니 생성·픽업일 저장은 전부 드롭 상세 페이지에서 대기열
+  // 순번이 돌아온 직후 이미 끝났다 — 여기선 그렇게 확보된 장바구니로 결제만 한다.
   const purchaseMutation = useMutation({
-    mutationFn: async () => {
-      if (!effectivePickupDate) throw new ApiException("OR005", "픽업 날짜를 선택해야 합니다.");
-      await dropApi.lockStart(dropId, qty);
-      await cartApi.createCart({ dropId, quantity: qty });
-      await cartApi.selectPickupDate(effectivePickupDate);
-      return orderApi.createOrder();
-    },
+    mutationFn: () => orderApi.createOrder(),
+    // 결제 성공 시 서버가 이미 장바구니를 지운 뒤라(OrderService.create) 아래 언마운트
+    // cleanup의 deleteCart()는 CART_NOT_FOUND로 조용히 실패할 뿐이라 skip 처리가 따로 필요 없다.
     onSuccess: (res) => router.push(`/order/complete?orderId=${res.orderId}`),
   });
+
+  // 잔액 부족으로 충전하러 가는 경우만 "의도적으로 계속 진행"이고, 그 외에 이 페이지를
+  // 벗어나면(뒤로가기, 탭 이동, 탭 닫기 등) 전부 이탈로 보고 재고 선점을 푼다. TTL이 있긴
+  // 하지만(장바구니 만료 배치가 결국 회수함) 그때까지 몇 분씩 묶어두지 않기 위함.
+  const skipReleaseRef = useRef(false);
+  const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // dev StrictMode는 mount→cleanup→mount를 한 번 더 도는데, 그 cleanup에서 바로
+    // deleteCart를 부르면 방금 만든 예약이 실제로는 안 떠났는데도 풀려버린다. 그래서
+    // cleanup에서는 바로 지우지 않고 살짝 지연시켜 예약해두고, 진짜로 다시 mount되면
+    // (=StrictMode의 가짜 언마운트였다면) 여기서 그 예약을 취소한다. 진짜 언마운트라면
+    // 다시 mount될 일이 없으니 타이머가 그대로 실행된다.
+    if (releaseTimerRef.current) {
+      clearTimeout(releaseTimerRef.current);
+      releaseTimerRef.current = null;
+    }
+
+    function handlePageHide() {
+      if (skipReleaseRef.current) return;
+      cartApi.deleteCartBeacon();
+    }
+    window.addEventListener("pagehide", handlePageHide);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      if (skipReleaseRef.current) return;
+      releaseTimerRef.current = setTimeout(() => {
+        cartApi.deleteCart().catch(() => {});
+      }, 300);
+    };
+  }, []);
 
   if (!dropIdValid) {
     return (
@@ -111,67 +141,18 @@ export function OrderView() {
               {drop.price.toLocaleString()}원
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
-              className="w-7 h-7 rounded-full flex items-center justify-center"
-              style={{ background: COLORS.border, color: COLORS.text }}
-            >
-              <Minus size={13} />
-            </button>
-            <span className="text-sm font-semibold w-4 text-center" style={{ color: COLORS.text }}>
-              {qty}
-            </span>
-            <button
-              onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
-              disabled={qty >= maxQty}
-              className="w-7 h-7 rounded-full flex items-center justify-center"
-              style={{
-                background: qty >= maxQty ? COLORS.surface : COLORS.accentSoft,
-                color: qty >= maxQty ? COLORS.disabled : COLORS.text,
-              }}
-            >
-              <Plus size={13} />
-            </button>
-          </div>
+          <span className="text-sm font-semibold flex-shrink-0" style={{ color: COLORS.text }}>
+            {qty}개
+          </span>
         </div>
-        {qty >= maxQty && (
-          <p className="text-xs text-center mt-1" style={{ color: COLORS.muted }}>
-            최대 {maxQty}개 (1인 구매 제한 또는 재고)
-          </p>
-        )}
 
         {/* Pickup date */}
         <div className="px-4 mt-5">
-          <h2 className="text-base font-semibold mb-0.5" style={{ color: COLORS.text }}>
-            픽업 날짜를 선택해주세요
+          <h2 className="text-base font-semibold mb-3" style={{ color: COLORS.text }}>
+            픽업 날짜
           </h2>
-          <p className="text-xs mb-4" style={{ color: COLORS.muted }}>
-            선택한 날짜에 매장에서 수령합니다
-          </p>
 
-          <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-            {drop.pickupDates.map((d) => {
-              const isSel = effectivePickupDate === d;
-              return (
-                <button
-                  key={d}
-                  onClick={() => setPickupDate(d)}
-                  className="px-3 py-2 rounded-lg text-sm flex-shrink-0"
-                  style={{
-                    background: isSel ? COLORS.accent : "transparent",
-                    color: isSel ? COLORS.bg : COLORS.text,
-                    border: isSel ? "none" : `1.5px solid ${COLORS.border}`,
-                    fontWeight: isSel ? 700 : 400,
-                  }}
-                >
-                  {fmtPickup(d)}
-                </button>
-              );
-            })}
-          </div>
-
-          {effectivePickupDate && (
+          {pickupDate ? (
             <div
               className="p-3 rounded-xl"
               style={{ background: COLORS.accentSoft, border: `1px solid ${COLORS.border}` }}
@@ -179,10 +160,14 @@ export function OrderView() {
               <div className="flex items-center gap-2">
                 <Check size={13} color={COLORS.accent} />
                 <span className="text-sm font-medium" style={{ color: COLORS.text }}>
-                  {fmtPickup(effectivePickupDate)} 방문
+                  {fmtPickup(pickupDate)} 방문
                 </span>
               </div>
             </div>
+          ) : (
+            <p className="text-xs" style={{ color: "#E0554F" }}>
+              픽업 날짜가 선택되지 않았습니다. 드롭 상세 페이지로 돌아가 다시 시도해주세요.
+            </p>
           )}
         </div>
 
@@ -258,8 +243,16 @@ export function OrderView() {
         style={{ background: COLORS.surface, borderTop: `1px solid ${COLORS.border}` }}
       >
         <button
-          onClick={() => (insufficient ? router.push("/wallet/charge") : purchaseMutation.mutate())}
-          disabled={purchaseMutation.isPending || (!insufficient && !effectivePickupDate)}
+          onClick={() => {
+            if (insufficient) {
+              skipReleaseRef.current = true;
+              const returnTo = `/order?dropId=${dropId}&qty=${qty}${pickupDate ? `&pickupDate=${pickupDate}` : ""}`;
+              router.push(`/wallet/charge?returnTo=${encodeURIComponent(returnTo)}`);
+            } else {
+              purchaseMutation.mutate();
+            }
+          }}
+          disabled={purchaseMutation.isPending || (!insufficient && !pickupDate)}
           className="w-full py-3.5 rounded-lg text-sm font-bold disabled:opacity-60"
           style={{ background: COLORS.accent, color: COLORS.bg }}
         >
@@ -267,7 +260,7 @@ export function OrderView() {
             ? "결제 처리 중..."
             : insufficient
               ? "충전하고 결제하기"
-              : !effectivePickupDate
+              : !pickupDate
                 ? "픽업 날짜를 선택해주세요"
                 : `${total.toLocaleString()}원 결제하기`}
         </button>

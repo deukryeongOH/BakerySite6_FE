@@ -3,12 +3,13 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, Heart, MapPin } from "lucide-react";
+import { Check, ChevronLeft, Heart, MapPin, Minus, Plus } from "lucide-react";
 import { COLORS } from "@/lib/theme";
 import { BreadBox } from "@/components/bread-box";
 import { DropBadge } from "@/components/drop-badge";
 import { useAuth } from "@/lib/auth/auth-context";
 import * as dropApi from "@/lib/api/drop";
+import * as cartApi from "@/lib/api/cart";
 import { ApiException } from "@/lib/api/types";
 import { toDropStatus } from "@/lib/types";
 import { pad, msToHMS, fmtDateTime, fmtPickup } from "@/lib/format";
@@ -46,9 +47,36 @@ export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi
     status === "SCHEDULED" ? new Date(drop.dropStart).getTime() : new Date(drop.dropEnd).getTime();
   const cd = msToHMS(target - now.getTime());
 
+  // 수량/픽업일은 대기열에 들어가기 전, 상세 페이지에서 먼저 고른다 — 대기열 통과 후
+  // lock-start 시점에 이 값을 그대로 실어 보낸다(재고 확인·선점은 여전히 lock-start가 함).
+  const maxQty = Math.max(1, Math.min(drop.limitQuantity, drop.remainQuantity));
+  const [qty, setQty] = useState(1);
+  const [pickupDate, setPickupDate] = useState<string | null>(null);
+  // 백엔드가 Set<LocalDate>로 내려줘서 순서가 보장 안 됨 — ISO 날짜 문자열이라 그냥 정렬하면 된다.
+  const sortedPickupDates = [...drop.pickupDates].sort();
+  // 첫 날짜를 기본 선택값으로 자동 지정하지 않는다 — 유저가 직접 골라야 구매하기가 눌린다.
+  const effectivePickupDate = pickupDate;
+
+  // 대기열 입장이 확정되자마자(=이 유저 차례가 되자마자) 상세 페이지에서 고른 수량만큼
+  // 재고를 바로 선점한다 — "구매하기"를 누른 시점이 아니라 실제 순번이 돌아온 시점에
+  // 재고를 잡아야, 뒤에 결제 화면까지 가는 동안 다른 사람이 먼저 채가는 걸 막을 수 있다.
+  const reserveMutation = useMutation({
+    mutationFn: async () => {
+      if (!effectivePickupDate) throw new ApiException("OR005", "픽업 날짜를 선택해야 합니다.");
+      await dropApi.lockStart(dropId, qty);
+      await cartApi.createCart({ dropId, quantity: qty });
+      await cartApi.selectPickupDate(effectivePickupDate);
+    },
+    onSuccess: () => {
+      const params = new URLSearchParams({ dropId: String(dropId), qty: String(qty) });
+      if (effectivePickupDate) params.set("pickupDate", effectivePickupDate);
+      router.push(`/order?${params.toString()}`);
+    },
+  });
+
   const confirmMutation = useMutation({
     mutationFn: () => dropApi.confirmEntry(dropId),
-    onSuccess: () => router.push(`/order?dropId=${dropId}`),
+    onSuccess: () => reserveMutation.mutate(),
   });
 
   const enterMutation = useMutation({
@@ -78,7 +106,8 @@ export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankQuery.data, rankPollingEnabled]);
 
-  const purchasing = enterMutation.isPending || rankPollingEnabled || confirmMutation.isPending;
+  const purchasing =
+    enterMutation.isPending || rankPollingEnabled || confirmMutation.isPending || reserveMutation.isPending;
   const rank = rankQuery.data?.status === "WAITING" ? rankQuery.data.rank : null;
 
   const purchaseErrorMessage = enterMutation.isError
@@ -89,7 +118,11 @@ export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi
       ? confirmMutation.error instanceof ApiException
         ? confirmMutation.error.message
         : "입장에 실패했습니다."
-      : null;
+      : reserveMutation.isError
+        ? reserveMutation.error instanceof ApiException
+          ? reserveMutation.error.message
+          : "재고 선점에 실패했습니다."
+        : null;
 
   return (
     <div className="flex flex-col flex-1" style={{ background: COLORS.bg }}>
@@ -261,17 +294,41 @@ export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi
               픽업 가능 날짜
             </span>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {drop.pickupDates.map((d) => (
-              <span
-                key={d}
-                className="text-xs px-2.5 py-1 rounded-full"
-                style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text }}
-              >
-                {fmtPickup(d)}
-              </span>
-            ))}
-          </div>
+          {status === "ON_SALE" ? (
+            <div className="flex flex-wrap gap-2">
+              {sortedPickupDates.map((d) => {
+                const isSel = effectivePickupDate === d;
+                return (
+                  <button
+                    key={d}
+                    onClick={() => setPickupDate((prev) => (prev === d ? null : d))}
+                    className="px-3 py-1.5 rounded-full text-xs flex items-center gap-1"
+                    style={{
+                      background: isSel ? COLORS.accent : COLORS.bg,
+                      color: isSel ? COLORS.bg : COLORS.text,
+                      border: isSel ? "none" : `1px solid ${COLORS.border}`,
+                      fontWeight: isSel ? 700 : 400,
+                    }}
+                  >
+                    {isSel && <Check size={11} />}
+                    {fmtPickup(d)}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {sortedPickupDates.map((d) => (
+                <span
+                  key={d}
+                  className="text-xs px-2.5 py-1 rounded-full"
+                  style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text }}
+                >
+                  {fmtPickup(d)}
+                </span>
+              ))}
+            </div>
+          )}
           <p
             className="text-xs mt-3 pt-3"
             style={{ color: COLORS.muted, borderTop: `1px solid ${COLORS.border}` }}
@@ -279,6 +336,38 @@ export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi
             배송 없음, 매장 방문 수령만 가능
           </p>
         </div>
+
+        {status === "ON_SALE" && (
+          <div
+            className="mx-4 mb-4 rounded-xl p-4 flex items-center justify-between"
+            style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+          >
+            <span className="text-sm font-semibold" style={{ color: COLORS.text }}>
+              수량
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                disabled={qty <= 1}
+                className="w-7 h-7 rounded-full flex items-center justify-center disabled:opacity-40"
+                style={{ background: COLORS.border, color: COLORS.text }}
+              >
+                <Minus size={13} />
+              </button>
+              <span className="text-sm font-semibold w-4 text-center" style={{ color: COLORS.text }}>
+                {qty}
+              </span>
+              <button
+                onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+                disabled={qty >= maxQty}
+                className="w-7 h-7 rounded-full flex items-center justify-center disabled:opacity-40"
+                style={{ background: qty >= maxQty ? COLORS.surface : COLORS.accentSoft, color: COLORS.text }}
+              >
+                <Plus size={13} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CTA */}
@@ -295,7 +384,11 @@ export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi
         {purchasing && (
           <div className="text-center py-2 mb-2">
             <p className="text-sm font-semibold" style={{ color: COLORS.accent }}>
-              {rank && rank > 0 ? `대기 순번 ${rank}번` : "입장 처리 중..."}
+              {rank && rank > 0
+                ? `대기 순번 ${rank}번`
+                : reserveMutation.isPending
+                  ? "재고 선점 중..."
+                  : "입장 처리 중..."}
             </p>
           </div>
         )}
@@ -317,11 +410,15 @@ export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi
         {status === "ON_SALE" && (
           <button
             onClick={() => enterMutation.mutate()}
-            disabled={purchasing}
+            disabled={purchasing || !effectivePickupDate}
             className="w-full py-3.5 rounded-lg text-sm font-bold disabled:opacity-60"
             style={{ background: COLORS.accent, color: COLORS.bg }}
           >
-            구매하기
+            {sortedPickupDates.length === 0
+              ? "픽업 가능 날짜가 없습니다"
+              : effectivePickupDate
+                ? `${qty}개 구매하기`
+                : "픽업 날짜를 선택해주세요"}
           </button>
         )}
         {(status === "SOLD_OUT" || status === "CLOSED") && (

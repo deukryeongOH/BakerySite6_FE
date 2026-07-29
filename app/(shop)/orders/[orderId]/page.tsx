@@ -68,6 +68,7 @@ export default function OrderDetailPage() {
           const status = ORDER_STATUS_LABEL[order.orderState];
           const canCancel = order.orderState === "PAID";
           const dDay = getDDay(order.pickupDate);
+          const totalAmount = order.orderItem.price * order.orderItem.quantity;
           return (
             <>
               <div className="flex-1 overflow-y-auto">
@@ -129,7 +130,7 @@ export default function OrderDetailPage() {
                         {order.orderItem.dropName} {order.orderItem.quantity}개
                       </p>
                       <p className="text-sm" style={{ color: COLORS.text }}>
-                        {order.totalAmount.toLocaleString()}원
+                        {totalAmount.toLocaleString()}원
                       </p>
                     </div>
                   </div>
@@ -143,7 +144,7 @@ export default function OrderDetailPage() {
                     결제 정보
                   </p>
                   {[
-                    ["결제 금액", `${order.totalAmount.toLocaleString()}원`],
+                    ["결제 금액", `${totalAmount.toLocaleString()}원`],
                     ["결제 수단", "예치금"],
                     ["결제 일시", fmtDateTime(order.paidAt)],
                   ].map(([l, v]) => (

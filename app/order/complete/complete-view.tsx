@@ -53,7 +53,7 @@ export function CompleteView() {
                 {order.orderItem.dropName} {order.orderItem.quantity}개
               </p>
               <p className="text-sm" style={{ color: COLORS.text }}>
-                {order.totalAmount.toLocaleString()}원
+                {(order.orderItem.price * order.orderItem.quantity).toLocaleString()}원
               </p>
             </div>
           </div>

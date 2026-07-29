@@ -25,6 +25,9 @@ export function ChargeSuccessView() {
   const searchParams = useSearchParams();
   const [state, setState] = useState<ViewState>({ kind: "confirming" });
   const startedRef = useRef(false);
+  // 드롭 구매 중 잔액 부족으로 충전하러 온 경우, 완료 후 예치금 화면 대신 하던 주문으로 되돌아간다.
+  const returnTo = searchParams.get("returnTo");
+  const destination = returnTo || "/wallet";
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -112,11 +115,11 @@ export function ChargeSuccessView() {
             {state.message}
           </p>
           <button
-            onClick={() => router.replace("/wallet")}
+            onClick={() => router.replace(destination)}
             className="px-5 py-2.5 rounded-lg text-sm font-semibold"
             style={{ background: COLORS.accent, color: COLORS.bg }}
           >
-            예치금으로 이동
+            {returnTo ? "돌아가서 계속하기" : "예치금으로 이동"}
           </button>
         </>
       )}
@@ -130,11 +133,11 @@ export function ChargeSuccessView() {
             현재 잔액 {state.balanceAfter.toLocaleString()}원
           </p>
           <button
-            onClick={() => router.replace("/wallet")}
+            onClick={() => router.replace(destination)}
             className="px-5 py-2.5 rounded-lg text-sm font-semibold"
             style={{ background: COLORS.accent, color: COLORS.bg }}
           >
-            예치금으로 이동
+            {returnTo ? "돌아가서 계속하기" : "예치금으로 이동"}
           </button>
         </>
       )}
