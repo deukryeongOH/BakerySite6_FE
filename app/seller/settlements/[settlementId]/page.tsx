@@ -1,14 +1,67 @@
 "use client";
 
+import { Fragment } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { BackHeader } from "@/components/back-header";
 import { BreadBox } from "@/components/bread-box";
 import { COLORS } from "@/lib/theme";
 import * as settlementApi from "@/lib/api/settlement";
+import type { SettlementStatus } from "@/lib/api/settlement";
 import { ApiException } from "@/lib/api/types";
 import { SettlementStatusBadge } from "@/components/settlement-status-badge";
 import { fmtDateTime, fmtPickup } from "@/lib/format";
+
+const ERROR_COLOR = "#E0554F";
+
+const TIMELINE_STEPS = [
+  { key: "confirmed", label: "정산 확정" },
+  { key: "paying", label: "지급 처리" },
+  { key: "done", label: "지급 완료" },
+] as const;
+
+function SettlementTimeline({ status }: { status: SettlementStatus }) {
+  const isFailed = status === "FAILED";
+  const stepIndex = status === "COMPLETED" ? 2 : status === "PAYING" || isFailed ? 1 : 0;
+
+  return (
+    <div className="flex items-center pt-1">
+      {TIMELINE_STEPS.map((step, i) => (
+        <Fragment key={step.key}>
+          <div className="flex flex-col items-center gap-1">
+            <div
+              className="w-2.5 h-2.5 rounded-full"
+              style={{
+                background: isFailed && i === 1 ? ERROR_COLOR : i <= stepIndex ? COLORS.accent : COLORS.border,
+              }}
+            />
+            <span
+              className="text-[10px] whitespace-nowrap"
+              style={{ color: i <= stepIndex ? COLORS.text : COLORS.muted }}
+            >
+              {step.label}
+            </span>
+          </div>
+          {i < TIMELINE_STEPS.length - 1 && (
+            <div
+              className="flex-1 h-px mb-3.5"
+              style={{ background: i < stepIndex ? COLORS.accent : COLORS.border }}
+            />
+          )}
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+const STATUS_MESSAGE: Partial<Record<SettlementStatus, { text: string; color: string }>> = {
+  ON_HOLD: { text: "정산이 보류 상태입니다. 자세한 사유는 정산팀에 문의해주세요.", color: COLORS.muted },
+  PAYING: { text: "지급이 진행 중입니다. 영업일 기준 1~2일 내 등록된 계좌로 입금됩니다.", color: COLORS.accent },
+  FAILED: {
+    text: "지급 처리 중 문제가 발생했습니다. 정산팀에서 확인 후 다시 지급을 진행할 예정입니다.",
+    color: ERROR_COLOR,
+  },
+};
 
 export default function MySettlementDetailPage() {
   const params = useParams<{ settlementId: string }>();
@@ -58,6 +111,15 @@ export default function MySettlementDetailPage() {
                 </span>
                 <SettlementStatusBadge status={settlement.status} />
               </div>
+
+              <SettlementTimeline status={settlement.status} />
+
+              {STATUS_MESSAGE[settlement.status] && (
+                <p className="text-xs pt-1" style={{ color: STATUS_MESSAGE[settlement.status]!.color }}>
+                  {STATUS_MESSAGE[settlement.status]!.text}
+                </p>
+              )}
+
               <div className="text-center py-3">
                 <span className="text-3xl font-bold" style={{ color: COLORS.accent }}>
                   {settlement.payoutAmount.toLocaleString()}원

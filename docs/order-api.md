@@ -17,9 +17,7 @@
 | GET | `/api/v1/orders/{id}` | 주문 상세 조회 |
 | PATCH | `/api/v1/orders/{id}/cancel` | 주문 취소 |
 | PATCH | `/api/v1/orders/{id}/confirm` | 구매 확정 |
-
-> ⚠️ `GET /api/v1/seller/orders`(판매자 주문 목록)는 `OrderController`/`SellerController` 어디에도 구현되어 있지 않습니다. 필요하면 백엔드에 먼저 요청이 필요합니다.
-> 
+| GET | `/api/v1/sellers/me/orders` | 판매자 본인 판매내역 목록 조회 |
 
 ---
 
@@ -474,6 +472,98 @@
   }
 }
 ```
+
+---
+
+### 6. 판매자 본인 판매내역 목록 조회
+
+## 1. 기본 정보
+
+- **설명:** 판매자 본인이 등록한 드롭에 걸린 주문(판매내역)을 최신순으로 페이징 조회합니다. 주문 상태별 필터를 지원합니다. `docs/backend-api-requests.md` #6으로 프론트에서 요청해 2026-07-29 구현됨(`SellerOrderController`).
+- **호출 시점 (Trigger):**
+    
+    > 판매자가 판매내역 화면에 진입했을 때, 또는 상태 필터/페이지를 변경했을 때 호출합니다. 픽업 수령 확인 후 [구매확정] 버튼(4번, `PATCH /orders/{id}/confirm`)을 누르기 위한 `orderId`를 얻는 화면이기도 합니다.
+    > 
+- **통신 기본 규격:**
+    - **Method:** `GET`
+    - **Path:** `/api/v1/sellers/me/orders`
+    - **요청 포맷 (Content-Type):** 없음
+    - **응답 포맷 (Accept):** `application/json`
+
+## 2. 요청 명세 (Request)
+
+### 요청 파라미터 (Parameters)
+
+| **구분** | **필드명** | **타입** | **필수 여부** | **설명 / 제약 조건** |
+| --- | --- | --- | --- | --- |
+| Header | `Authorization` | String | Y | Bearer 토큰 인증값 |
+| Query | `orderState` | String | N | 상태 필터. `OrderState` enum 이름 그대로(`PAID`/`CONFIRMED`/`CANCELED`, 대문자). 미지정 시 전체 |
+| Query | `page` | Integer | N | 페이지 번호 (Default: 0) |
+| Query | `size` | Integer | N | 페이지 크기 (Default: 10, 최대 캡 적용 — `GET /orders`와 동일 관례) |
+
+> 판매자 권한 판정은 `PATCH /orders/{id}/confirm`과 동일하게 `CurrentSellerProvider.getSellerId()`로 이뤄집니다(판매자로 등록되지 않은 계정은 403).
+> 
+
+## 3. 응답 명세 (Response)
+
+### 응답 파라미터 (Parameters)
+
+| **필드명** | **타입** | **필수 여부** | **설명** |
+| --- | --- | --- | --- |
+| `success` | Boolean | Y | 처리 성공 여부 |
+| `data` | Object | Y | 실제 반환 데이터 객체 |
+| `data.content` | Array | Y | 판매내역 목록 |
+| `data.content[].orderId` | Long | Y | 주문 ID |
+| `data.content[].dropId` | Long | Y | 드롭 ID |
+| `data.content[].dropName` | String | Y | 드롭명 (주문 시점 스냅샷) |
+| `data.content[].buyerName` | String | Y | 구매자 이름 (`order.memberId`로 `Member` 조회) |
+| `data.content[].quantity` | Integer | Y | 주문 수량 |
+| `data.content[].totalAmount` | Number | Y | 총 결제 금액 |
+| `data.content[].orderState` | String | Y | 주문 상태 |
+| `data.content[].pickupDate` | String | Y | 픽업 날짜 (구매자 선택값, YYYY-MM-DD) |
+| `data.content[].paidAt` | String | Y | 결제 완료 시각 |
+| `data.content[].confirmedAt` | String | N | 구매 확정 시각 (미확정 시 null) |
+| `data.content[].canceledAt` | String | N | 취소 시각 (미취소 시 null) |
+| `data.page` | Integer | Y | 현재 페이지 번호 |
+| `data.size` | Integer | Y | 페이지 크기 |
+| `data.totalElements` | Long | Y | 전체 판매내역 건수 |
+| `data.totalPages` | Integer | Y | 전체 페이지 수 |
+
+### 응답 예시 (Response JSON - 200 OK)
+
+```json
+{
+  "success": true,
+  "data": {
+    "content": [
+      {
+        "orderId": 101,
+        "dropId": 7,
+        "dropName": "시그니처 소금빵",
+        "buyerName": "김구매",
+        "quantity": 2,
+        "totalAmount": 5000,
+        "orderState": "PAID",
+        "pickupDate": "2026-07-17",
+        "paidAt": "2026-07-16T11:00:00",
+        "confirmedAt": null,
+        "canceledAt": null
+      }
+    ],
+    "page": 0,
+    "size": 10,
+    "totalElements": 1,
+    "totalPages": 1
+  }
+}
+```
+
+## 4. 예외 및 에러 처리 (Error Handling)
+
+| **HTTP Status** | **에러 코드** | **에러 메시지 (Message)** | **발생 시나리오** |
+| --- | --- | --- | --- |
+| **401 Unauthorized** | `ME002` | "유효하지 않은 인증 토큰입니다." | 토큰 만료/서명 오류 |
+| **403 Forbidden** | `ME004` | "권한이 없습니다." | 판매자로 등록되지 않은 계정(`sellerId` 없음)이 호출 |
 
 ---
 

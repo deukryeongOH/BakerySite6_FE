@@ -3,14 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Calendar } from "lucide-react";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as sellerApi from "@/lib/api/seller";
 import * as dropApi from "@/lib/api/drop";
+import * as settlementApi from "@/lib/api/settlement";
+import * as sellerOrderApi from "@/lib/api/seller-order";
 import { useAuth } from "@/lib/auth/auth-context";
-import { fmtDateTime } from "@/lib/format";
+import { fmtDateTime, fmtPickup } from "@/lib/format";
 import { getBankName } from "@/lib/bank";
 import { ApiException } from "@/lib/api/types";
+import { SettlementStatusBadge } from "@/components/settlement-status-badge";
 import type { ApplicationStatus } from "@/lib/api/seller";
 import type { DropApiStatus } from "@/lib/api/drop";
 
@@ -31,6 +35,13 @@ const DROP_TABS: { status: DropApiStatus; label: string }[] = [
   { status: "ACTIVE", label: "진행중" },
   { status: "COMPLETED", label: "종료" },
 ];
+
+function toDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 export default function SellerDashboardPage() {
   const { memberId } = useAuth();
@@ -56,6 +67,40 @@ export default function SellerDashboardPage() {
     queryFn: () => dropApi.getMyDrops(),
     enabled: isApproved,
   });
+
+  const settlementsQuery = useQuery({
+    queryKey: ["mySettlements"],
+    queryFn: settlementApi.getMySettlements,
+    enabled: isApproved,
+    retry: false,
+  });
+
+  const latestSettlement = settlementsQuery.data?.settlements.length
+    ? [...settlementsQuery.data.settlements].sort((a, b) => b.periodStart.localeCompare(a.periodStart))[0]
+    : null;
+
+  const pickupOrdersQuery = useQuery({
+    queryKey: ["sellerOrders", "pickupSummary"],
+    queryFn: () => sellerOrderApi.getSellerOrders({ size: 100 }),
+    enabled: isApproved,
+  });
+
+  const activeOrders = pickupOrdersQuery.data?.content.filter((o) => o.orderState !== "CANCELED") ?? [];
+  const todayStr = toDateStr(new Date());
+  const todayOrders = activeOrders.filter((o) => o.pickupDate === todayStr);
+  const todayQty = todayOrders.reduce((s, o) => s + o.quantity, 0);
+
+  const next7Days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  const pickupChartData = next7Days.map((d) => {
+    const dateStr = toDateStr(d);
+    const cnt = activeOrders.filter((o) => o.pickupDate === dateStr).reduce((s, o) => s + o.quantity, 0);
+    return { label: `${d.getMonth() + 1}/${d.getDate()}`, cnt, isToday: dateStr === todayStr };
+  });
+  const maxPickupCnt = Math.max(...pickupChartData.map((d) => d.cnt), 1);
 
   const deleteMutation = useMutation({
     mutationFn: (dropId: number) => dropApi.deleteDrop(dropId),
@@ -147,12 +192,134 @@ export default function SellerDashboardPage() {
         )}
 
         {isApproved && (
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+          >
+            <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+              <Calendar size={15} color={COLORS.accent} />
+              <span className="text-sm font-semibold" style={{ color: COLORS.text }}>
+                오늘 픽업 예정 · {fmtPickup(todayStr)}
+              </span>
+            </div>
+            {pickupOrdersQuery.isLoading && (
+              <p className="px-4 py-3 text-sm" style={{ color: COLORS.muted }}>
+                불러오는 중...
+              </p>
+            )}
+            {!pickupOrdersQuery.isLoading && todayQty === 0 && (
+              <p className="px-4 py-3 text-sm" style={{ color: COLORS.muted }}>
+                오늘 픽업 예정 주문이 없습니다
+              </p>
+            )}
+            {todayOrders.map((o) => (
+              <div
+                key={o.orderId}
+                className="flex justify-between items-center px-4 py-3"
+                style={{ borderTop: `1px solid ${COLORS.border}` }}
+              >
+                <span className="text-sm" style={{ color: COLORS.text }}>
+                  {o.dropName}
+                </span>
+                <span className="text-sm font-semibold" style={{ color: COLORS.accent }}>
+                  {o.quantity}개
+                </span>
+              </div>
+            ))}
+            {todayQty > 0 && (
+              <div
+                className="flex justify-between items-center px-4 py-3"
+                style={{ borderTop: `1px solid ${COLORS.border}` }}
+              >
+                <span className="text-sm font-semibold" style={{ color: COLORS.text }}>
+                  총
+                </span>
+                <span className="text-2xl font-bold" style={{ color: COLORS.text }}>
+                  {todayQty}개
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isApproved && (
+          <div
+            className="p-4 rounded-xl"
+            style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+          >
+            <p className="text-sm font-semibold mb-4" style={{ color: COLORS.text }}>
+              날짜별 픽업 집계
+            </p>
+            <div className="flex items-end gap-2" style={{ height: 80 }}>
+              {pickupChartData.map((d) => (
+                <div key={d.label} className="flex-1 flex flex-col items-center gap-0.5">
+                  <span className="text-[10px]" style={{ color: d.isToday ? COLORS.accent : COLORS.muted }}>
+                    {d.cnt > 0 ? d.cnt : ""}
+                  </span>
+                  <div
+                    className="w-full rounded-t-sm"
+                    style={{
+                      height: d.cnt > 0 ? `${(d.cnt / maxPickupCnt) * 52}px` : 4,
+                      background: d.isToday ? COLORS.accent : COLORS.accentSoft,
+                      minHeight: 4,
+                    }}
+                  />
+                  <span className="text-[10px]" style={{ color: d.isToday ? COLORS.accent : COLORS.muted }}>
+                    {d.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isApproved && (
           <Link
             href="/seller/settlements"
+            className="rounded-xl p-4 flex flex-col gap-2"
+            style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold" style={{ color: COLORS.text }}>
+                최근 정산
+              </span>
+              {latestSettlement && <SettlementStatusBadge status={latestSettlement.status} />}
+            </div>
+
+            {settlementsQuery.isLoading && (
+              <p className="text-xs" style={{ color: COLORS.muted }}>
+                불러오는 중...
+              </p>
+            )}
+            {!settlementsQuery.isLoading && !latestSettlement && (
+              <p className="text-xs" style={{ color: COLORS.muted }}>
+                아직 생성된 정산 내역이 없습니다.
+              </p>
+            )}
+            {latestSettlement && (
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs" style={{ color: COLORS.muted }}>
+                  {fmtPickup(latestSettlement.periodStart)} ~ {fmtPickup(latestSettlement.periodEnd)}
+                </span>
+                <span className="text-lg font-bold" style={{ color: COLORS.accent }}>
+                  {latestSettlement.payoutAmount.toLocaleString()}원
+                </span>
+              </div>
+            )}
+
+            <span className="text-xs font-semibold" style={{ color: COLORS.accent }}>
+              전체 정산 내역 보기 →
+            </span>
+          </Link>
+        )}
+
+        {isApproved && (
+          <Link
+            href="/seller/orders"
             className="w-full py-3 rounded-lg text-sm text-center"
             style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
           >
-            내 정산
+            판매내역
           </Link>
         )}
 

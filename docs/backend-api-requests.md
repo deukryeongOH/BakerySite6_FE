@@ -8,22 +8,7 @@
 
 ## 미해결
 
-### 1. 판매자 본인 주문/픽업 집계 조회
-
-- **요청일:** 2026-07-28
-- **관련 도메인:** order (`docs/order-api.md`)
-- **배경:** 판매자 대시보드 원본 디자인(`docs/DarkArtisanBakeryDesign/src/app/App.tsx`의 `SellerDashboardScreen`)에는 "오늘 픽업 예정" 목록과 "날짜별 픽업 집계" 차트가 있는데, 둘 다 판매자 소유 드롭에 걸린 주문 데이터가 있어야 계산할 수 있습니다. 그런데 판매자용 주문 조회 API 자체가 없고(`GET /api/v1/seller/orders` 미구현), order 도메인은 여전히 주문 데이터가 스텁 상수(`OrderService.STUB_*`)로 고정돼 있어(`docs/order-api.md` ⚠️ 참고) 설령 목록 API가 생겨도 픽업일별 집계가 실제 값을 반영하지 못합니다. 이번 M6 작업에서는 이 두 위젯을 프론트에서 구현하지 않고 건너뛰었습니다(마이그레이션 플랜 M6 항목 참고).
-- **요청:** 판매자 본인이 등록한 드롭에 걸린 주문을 픽업일 기준으로 조회하는 API. 최소한 `pickupDate`, `dropId`/`dropName`, `quantity`, `orderState`가 필요합니다.
-- **호출 시점(예상):** 판매자 대시보드 진입 시.
-- **선행 조건:** order 도메인 스텁 데이터(`OrderService.STUB_*`)가 실제 주문 데이터로 교체되지 않으면, 이 API가 생겨도 집계 결과가 무의미합니다 — order 도메인 정리가 먼저 필요합니다.
-
-**해결되면 프론트에서 할 일**
-
-- `app/seller/dashboard/page.tsx`에 "오늘 픽업 예정"/"날짜별 픽업 집계" 위젯 추가(원본 디자인의 `SellerDashboardScreen` 참고).
-
----
-
-### 2. 예정된 드롭 목록 조회 (날짜별)
+### 1. 예정된 드롭 목록 조회 (날짜별)
 
 - **요청일:** 2026-07-28
 - **관련 도메인:** drop (`docs/drop-api.md`)
@@ -76,7 +61,7 @@
 
 ---
 
-### 3. 관리자용 전체 정산 목록 조회
+### 2. 관리자용 전체 정산 목록 조회
 
 - **요청일:** 2026-07-29
 - **관련 도메인:** settlement (`docs/settlement-api.md`)
@@ -94,17 +79,7 @@
 
 ---
 
-### 4. `/internal/v1/settlement-*` 관리자 권한 검사 부재
-
-- **요청일:** 2026-07-29
-- **관련 도메인:** settlement (`docs/settlement-api.md`)
-- **배경:** `docs/settlement-api.md`에 이미 명시돼 있듯, `/internal/v1/...` 아래 컨트롤러(배치 실행, 지급 시작/완료/실패 등) 어디에도 관리자 role 체크나 내부 서비스 토큰 검증이 코드에 없습니다. 현재는 네트워크 레벨(사내망 등)로만 보호된다고 가정하는 것으로 보입니다. 프론트는 `app/admin/layout.tsx`에서 클라이언트 사이드 role 가드만 걸어뒀는데, 이건 우회 가능한 방어라 실제 접근 제어는 아닙니다.
-- **요청:** 배포 전 `/internal/v1/settlement-*` 엔드포인트에 관리자 인증/권한 검사(또는 최소한 내부망 전용 배포 구성) 확인이 필요합니다.
-- **선행 조건:** 없음 — 배포 전 반드시 확인.
-
----
-
-### 5. 판매자 재신청 엔드포인트
+### 3. 판매자 재신청 엔드포인트
 
 - **요청일:** 2026-07-29
 - **관련 도메인:** seller (`docs/seller-api.md`)
@@ -122,7 +97,7 @@
 
 ---
 
-### 6. 주문 상세 응답에 판매자 연락처/주소 추가
+### 4. 주문 상세 응답에 판매자 연락처/주소 추가
 
 - **요청일:** 2026-07-29
 - **관련 도메인:** order (`docs/order-api.md`)
@@ -136,18 +111,42 @@
 
 ---
 
-### 7. (동작 확인 요청) `DELETE /cart` 호출 시 `DropEntry` 상태 복원 여부
+### 5. 판매자에게 정산 실패 사유 노출
 
 - **요청일:** 2026-07-29
-- **관련 도메인:** cart, drop (`docs/cart-api.md`, `docs/drop-api.md`)
-- **배경:** 결제 화면(`app/order/order-view.tsx`)에서 이탈하면 프론트가 `DELETE /cart`를 호출해 재고 선점만 해제합니다. 그런데 대기열 참여 이력(`DropEntry`)이 그대로 남아있다면, 드롭 상세로 돌아가 다시 "구매하기"를 눌렀을 때 `enterQueue`가 409 `DR006`("이미 참여 중이거나 구매가 완료된 드롭입니다")을 반환해서 그 드롭을 그 계정으로 다시는 살 수 없게 됩니다(하루 1드롭 구조라 영향이 큼). 이건 새 API 요청이 아니라 실제 코드/DB 동작 확인 요청입니다.
-- **확인해줄 내용:** `DELETE /cart`(또는 재고 선점 해제 로직) 호출 시 연결된 `DropEntry`의 상태가 재입장 가능한 상태로 되돌아가는지, 아니면 그대로 남는지.
-- **이후 조치(확인 결과에 따라 분기):**
-  - 복원이 안 된다면 ① `DELETE /cart` 시 `DropEntry`도 함께 복원하도록 백엔드 수정, 또는 ② `enterQueue`가 "이미 참여 이력이 있으면 `confirmEntry`/`lock-start`부터 재개"하도록 허용 — 둘 중 하나가 필요합니다. 결정되면 이 항목을 확정 스펙으로 갱신합니다.
+- **관련 도메인:** settlement
+- **배경:** `SellerSettlementDetailResponse`(`GET /api/v1/sellers/me/settlements/{settlementId}`)에는 `status`만 있고 실패 사유가 없다. 실제 사유는 `SettlementPayout.failureReason`에 저장되지만 이건 admin 전용 `/internal/v1/settlement-payouts/{payoutId}` 계열로만 조회 가능하다. 정산이 `FAILED`가 되면 판매자는 빨간 "FAILED" 배지 하나만 보고 원인도, 다음 조치도 알 수 없는 상태로 남는다.
+- **요청:** 판매자 정산 상세 응답에 가장 최근 payout의 `failureReason`/`failedAt`(또는 그에 준하는 안내 문구 필드)을 포함.
+- **호출 시점(예상):** 판매자 정산 상세 화면 진입 시(기존 API 응답 필드만 추가).
+
+**해결되면 프론트에서 할 일**
+
+- `app/seller/settlements/[settlementId]/page.tsx`의 `FAILED` 상태 분기에 실패 사유 텍스트 노출.
 
 ---
 
 ## 해결됨
+
+### 6. 판매자 본인 판매내역(주문) 목록 조회 (대시보드 픽업 집계 포함)
+
+- **요청일:** 2026-07-28 / 2026-07-29 (아래 두 요청을 통합) / **해결일:** 2026-07-29
+- **관련 도메인:** order (`docs/order-api.md`)
+- **배경:** 판매자가 자신의 드롭에 걸린 주문을 확인하고 픽업 수령 후 [구매확정] 버튼을 누르려면, 먼저 자신의 판매내역을 주문 단위로 목록 조회할 수 있어야 했습니다. `GET /api/v1/orders`는 buyer 스코프라 재사용할 수 없고, `GET /drops/mine`으로는 개별 주문의 `orderId`를 알 방법이 없었습니다. 같은 갭에서 나온 대시보드용 "오늘 픽업 예정"/"날짜별 픽업 집계" 요청(원본 디자인 `SellerDashboardScreen`, M6에서 보류됨)과 통합해서 하나의 API로 요청했습니다.
+- **최종 스펙:** `GET /api/v1/sellers/me/orders` (`SellerOrderController`). Query `orderState`(선택, `PAID`/`CONFIRMED`/`CANCELED`), `page`(기본 0), `size`(기본 10, 최대 캡 적용). 판매자 권한 판정은 `PATCH /orders/{id}/confirm`과 동일하게 `CurrentSellerProvider.getSellerId()` 존재 여부로(미등록 계정은 403 `ME004`). 응답은 제안했던 스펙 그대로 구현됨 — `content[]`에 `orderId`/`dropId`/`dropName`/`buyerName`/`quantity`/`totalAmount`/`orderState`/`pickupDate`/`paidAt`/`confirmedAt`/`canceledAt`, `buyerName`은 `order.memberId`로 `Member`를 조회해서 채움.
+- **검증(2026-07-29):** 백엔드 유닛/컨트롤러 테스트(`OrderServiceTest`, `SellerOrderControllerTest`) 통과 확인. 로컬 서버(`:8080`)에 실제 로그인 토큰으로 호출해 정상 목록·필터 응답과 `PATCH /orders/{id}/confirm` 이후 목록에 `CONFIRMED`로 반영되는 것까지 실제 확인함(검증용으로 만든 임시 판매자/드롭/회원 데이터는 확인 후 정리함. 기존 판매자 `sellerId=6`의 `orderId=5`는 검증 과정에서 `CONFIRMED`로 확정됐고, 대신 동일 판매자에 새 `PAID` 주문 `orderId=7`을 만들어 남겨둠 — 브라우저에서 "구매확정" 버튼을 직접 눌러볼 수 있는 테스트 주문으로 사용 가능).
+- **프론트 반영 완료(2026-07-29):** `lib/api/seller-order.ts`의 `getSellerOrders`/`SellerOrderListItem`이 실제 응답과 이미 일치해 타입 변경 불필요(미구현 경고 주석만 제거). `app/seller/orders/page.tsx`(판매내역 화면)가 이 API로 정상 동작. `app/seller/dashboard/page.tsx`에 "오늘 픽업 예정"/"날짜별 픽업 집계" 위젯 추가(이 API 응답을 `pickupDate` 기준으로 그룹핑해서 클라이언트에서 계산).
+
+---
+
+### 관리자용 정산 단건 상세 조회
+
+- **요청일:** 2026-07-29 / **해결일:** 2026-07-29
+- **관련 도메인:** settlement (`docs/settlement-api.md`)
+- **배경:** `app/admin/settlements/page.tsx`의 지급 관리 탭이 정산 ID만으로 지급 이력만 보여주고, 판매자·기간·금액을 확인할 방법이 없어 관리자가 대상을 눈으로 확인하지 못한 채 지급을 시작하는 문제였습니다.
+- **최종 스펙:** `GET /internal/v1/settlements/{settlementId}` → `ApiResponse<SettlementResponse>`. 필드: `settlementId`, `sellerId`, `periodStart`, `periodEnd`, `grossSalesAmount`, `commissionAmount`, `netSalesAmount`, `adjustmentAmount`, `payoutAmount`, `targetCount`, `status`, `createdAt`, `completedAt` — 제안했던 스펙 그대로 구현됨(`AdminSettlementController`/`SettlementQueryService`). `settlementId`≤0이면 400, 없으면 404.
+- **프론트 반영 완료(2026-07-29):** `lib/api/settlement.ts`에 `getSettlement(settlementId)` 추가. `app/admin/settlements/page.tsx`의 `PayoutTab`이 ID 조회 시 이 API로 정산 요약 카드(판매자, 기간, 금액, 상태 배지)를 지급 이력 위에 먼저 보여주고, 조회에 성공한 뒤에만 지급 이력/지급 시작 컨트롤이 나타나도록 변경. "지급 시작" 확인 다이얼로그에도 실제 판매자 ID·지급액을 포함.
+
+---
 
 ### 1. 내 판매자 신청 조회
 
@@ -164,3 +163,22 @@
 - **관련 도메인:** seller (`docs/seller-api.md`)
 - **최종 스펙:** `GET /api/v1/sellers` (Bearer 토큰, admin 전용). Query `applicationStatus`(생략 시 `PENDING`)로 필터링. 응답은 `MySellerResponse`(`GET /sellers/me`와 동일 필드, `rejectReason` 포함)의 배열. 제안했던 스펙 그대로 구현됨.
 - **프론트 반영 완료(2026-07-29):** `lib/api/seller.ts`에 `getPendingSellers(applicationStatus?)` 추가. `app/admin/approvals/page.tsx`를 판매자 ID 직접 입력 방식에서 이 목록 API 기반 카드 리스트 UI로 교체 — 카드를 클릭하면 승인/반려 컨트롤이 펼쳐지고, 처리 성공 시 `["sellers", "pending"]` 쿼리를 invalidate해서 처리된 항목이 목록에서 자동으로 빠짐.
+
+---
+
+### 3. `/internal/v1/settlement-*` 관리자 권한 검사 부재
+
+- **요청일:** 2026-07-29 / **해결일:** 2026-07-28 (요청 시점 이전에 이미 반영됨)
+- **관련 도메인:** settlement (`docs/settlement-api.md`)
+- **배경:** `/internal/v1/...` 아래 컨트롤러(배치 실행, 지급 시작/완료/실패 등)에 관리자 role 체크나 내부 서비스 토큰 검증이 없다는 우려였습니다.
+- **확인 결과:** `SecurityConfig.java:42`에 `.requestMatchers("/internal/v1/**").hasRole("ADMIN")`이 이미 적용돼 있습니다(커밋 `52ddca6` "feat(settlement): SecurityConfig 정산 관리자 전용 추가", 2026-07-28). `app/admin/layout.tsx`의 클라이언트 사이드 role 가드는 여전히 우회 가능한 방어이므로 UX용으로만 취급하고, 실제 접근 제어는 서버의 `hasRole("ADMIN")`이 담당합니다.
+
+---
+
+### 4. `DELETE /cart` 호출 시 `DropEntry` 상태 복원 여부 (동작 확인 완료)
+
+- **요청일:** 2026-07-29 / **확인일:** 2026-07-29
+- **관련 도메인:** cart, drop (`docs/cart-api.md`, `docs/drop-api.md`)
+- **배경:** 결제 화면(`app/order/order-view.tsx`)에서 이탈하면 프론트가 `DELETE /cart`를 호출해 재고 선점만 해제하는데, 대기열 참여 이력(`DropEntry`)이 그대로 남아있다면 재입장 시 `enterQueue`가 409 `DR006`을 반환해 그 드롭을 다시는 살 수 없게 될 것을 우려했습니다.
+- **확인 결과:** `CartService.deleteCart`(`CartService.java:233-238`)가 삭제 전 `DropLockService.rollbackStock`을 호출하고, 여기서 `DropEntry.failEntry()`로 상태를 `FAILED`로 전환합니다(`DropLockService.java:48-56`). `DropEnterService.enterQueue`의 재입장 차단 조건(`blockStatuses`)은 `RESERVED`, `COMPLETED`만 포함하고(`DropEnterService.java:60`) `FAILED`는 애초에 포함된 적이 없습니다 — 즉 `DELETE /cart` 이후 같은 드롭에 다시 `enterQueue`를 호출해도 차단되지 않습니다. (부가적으로 오늘 커밋 `4b79d46`에서 `ENTERED` 상태도 blockStatuses에서 제외되어, 대기열 통과 후 상세만 보고 나간 경우의 재진입도 함께 허용되도록 정리됐습니다.)
+- **프론트 반영:** 별도 작업 불필요 — 우려했던 데드엔드가 현재 코드상 발생하지 않음을 확인.

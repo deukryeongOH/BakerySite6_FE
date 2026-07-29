@@ -82,3 +82,16 @@ export function cancelOrder(orderId: number) {
     method: "PATCH",
   });
 }
+
+export interface ConfirmOrderResponse {
+  orderId: number;
+  orderState: OrderState;
+  confirmedAt: string;
+}
+
+/** 판매자가 픽업 수령을 확인하고 구매를 확정. 호출자의 sellerId가 주문의 sellerId와 일치해야 함(불일치 시 403). */
+export function confirmOrder(orderId: number) {
+  return apiRequest<ConfirmOrderResponse>(`/api/v1/orders/${orderId}/confirm`, {
+    method: "PATCH",
+  });
+}

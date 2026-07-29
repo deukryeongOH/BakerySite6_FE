@@ -204,19 +204,49 @@ function PayoutTab() {
   const [externalTxId, setExternalTxId] = useState<Record<number, string>>({});
   const [failureReason, setFailureReason] = useState<Record<number, string>>({});
 
+  const settlementQuery = useQuery({
+    queryKey: ["settlements", settlementId, "detail"],
+    queryFn: () => settlementApi.getSettlement(settlementId!),
+    enabled: settlementId !== null,
+    retry: false,
+  });
+
   const payoutsQuery = useQuery({
     queryKey: ["settlements", settlementId, "payouts"],
     queryFn: () => settlementApi.getPayoutsForSettlement(settlementId!),
-    enabled: settlementId !== null,
+    enabled: settlementId !== null && settlementQuery.isSuccess,
   });
 
   const invalidatePayouts = () =>
     queryClient.invalidateQueries({ queryKey: ["settlements", settlementId, "payouts"] });
 
+  /**
+   * 서버는 같은 idempotencyKey로 재요청하면 (재시도 성공/실패 여부와 무관하게) 항상 최초 결과를
+   * 그대로 반환하고 새 시도를 만들지 않는다(docs/settlement-api.md §6.3 2번). 그래서 매 클릭마다
+   * Date.now()로 새 키를 쓰면 멱등성이 없고(네트워크 재시도 시 중복 송금 위험), 반대로 정산ID만으로
+   * 고정하면 실패 후 재시도가 영원히 막힌다. "지금까지 조회된 payout 개수"를 시도 번호로 써서, 서버가
+   * 아직 새 payout을 만들었는지 확인 못 한 상태(재조회 전)에서는 같은 키를 재사용(재시도 안전)하고,
+   * 이전 시도가 실제로 종결된 뒤(FAILED 등, payoutsQuery가 갱신된 뒤)에만 다음 번호로 넘어간다.
+   */
+  const attemptNumber = (payoutsQuery.data?.payouts.length ?? 0) + 1;
+  const nextIdempotencyKey = `PAYOUT-${settlementId}-${attemptNumber}`;
+  const hasProcessingPayout = payoutsQuery.data?.payouts.some((p) => p.status === "PROCESSING") ?? false;
+
   const startMutation = useMutation({
-    mutationFn: () => settlementApi.startPayout(settlementId!, `PAYOUT-${settlementId}-${Date.now()}`),
+    mutationFn: () => settlementApi.startPayout(settlementId!, nextIdempotencyKey),
     onSuccess: invalidatePayouts,
   });
+
+  function handleStartPayout() {
+    const settlement = settlementQuery.data;
+    if (!settlement) return;
+    const confirmed = window.confirm(
+      `정산 #${settlementId} (판매자 #${settlement.sellerId})에 대해 ` +
+        `${settlement.payoutAmount.toLocaleString()}원 지급을 시작합니다(${attemptNumber}번째 시도).\n\n` +
+        "이 작업은 실제 송금 절차를 시작하며 되돌릴 수 없습니다. 계속하시겠습니까?",
+    );
+    if (confirmed) startMutation.mutate();
+  }
 
   const completeMutation = useMutation({
     mutationFn: (payoutId: number) => settlementApi.completePayout(payoutId, externalTxId[payoutId] ?? ""),
@@ -235,7 +265,7 @@ function PayoutTab() {
         style={{ background: COLORS.accentSoft, border: `1px solid ${COLORS.border}` }}
       >
         <p className="text-xs" style={{ color: COLORS.accent }}>
-          관리자용 정산 목록 조회 API가 아직 없어 정산 ID를 직접 입력해야 합니다.
+          관리자용 정산 전체 목록 조회 API가 아직 없어 정산 ID를 직접 입력해야 합니다. (ID 조회 시 판매자·금액은 확인됩니다)
         </p>
       </div>
 
@@ -263,6 +293,47 @@ function PayoutTab() {
 
       {settlementId !== null && (
         <>
+          {settlementQuery.isLoading && (
+            <p className="text-sm" style={{ color: COLORS.muted }}>
+              정산 정보를 불러오는 중...
+            </p>
+          )}
+          {settlementQuery.isError && (
+            <p className="text-sm" style={{ color: ERROR_COLOR }}>
+              {errorMessage(settlementQuery.error, "정산 정보를 불러오지 못했습니다.")}
+            </p>
+          )}
+
+          {settlementQuery.data && (
+            <div
+              className="rounded-xl p-4 flex flex-col gap-2"
+              style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold" style={{ color: COLORS.text }}>
+                  판매자 #{settlementQuery.data.sellerId}
+                </span>
+                <SettlementStatusBadge status={settlementQuery.data.status} />
+              </div>
+              <span className="text-xs" style={{ color: COLORS.muted }}>
+                {settlementQuery.data.periodStart} ~ {settlementQuery.data.periodEnd} ·{" "}
+                {settlementQuery.data.targetCount}건
+              </span>
+              <span className="text-xs" style={{ color: COLORS.muted }}>
+                판매 {settlementQuery.data.grossSalesAmount.toLocaleString()}원 · 수수료{" "}
+                {settlementQuery.data.commissionAmount.toLocaleString()}원 · 조정{" "}
+                {settlementQuery.data.adjustmentAmount.toLocaleString()}원
+              </span>
+              <span className="text-lg font-bold" style={{ color: COLORS.accent }}>
+                지급액 {settlementQuery.data.payoutAmount.toLocaleString()}원
+              </span>
+            </div>
+          )}
+        </>
+      )}
+
+      {settlementId !== null && settlementQuery.isSuccess && (
+        <>
           {payoutsQuery.isLoading && (
             <p className="text-sm" style={{ color: COLORS.muted }}>
               불러오는 중...
@@ -279,10 +350,15 @@ function PayoutTab() {
               {errorMessage(startMutation.error, "지급 시작에 실패했습니다.")}
             </p>
           )}
+          {hasProcessingPayout && (
+            <p className="text-xs" style={{ color: COLORS.muted }}>
+              이미 처리 중인 지급 건이 있습니다. 완료/실패 처리 후 다시 시도해주세요.
+            </p>
+          )}
           <button
             type="button"
-            onClick={() => startMutation.mutate()}
-            disabled={startMutation.isPending}
+            onClick={handleStartPayout}
+            disabled={startMutation.isPending || hasProcessingPayout || !settlementQuery.data}
             className="py-2.5 rounded-lg text-sm font-semibold disabled:opacity-60"
             style={{ background: COLORS.accent, color: COLORS.bg }}
           >

@@ -113,6 +113,27 @@ export function getPayoutsForSettlement(settlementId: number) {
   );
 }
 
+export interface Settlement {
+  settlementId: number;
+  sellerId: number;
+  periodStart: string;
+  periodEnd: string;
+  grossSalesAmount: number;
+  commissionAmount: number;
+  netSalesAmount: number;
+  adjustmentAmount: number;
+  payoutAmount: number;
+  targetCount: number;
+  status: SettlementStatus;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+/** 관리자용 정산 단건 상세 조회. 지급 시작 전 판매자/금액을 확인하는 용도. */
+export function getSettlement(settlementId: number) {
+  return apiRequest<Settlement>(`/internal/v1/settlements/${settlementId}`);
+}
+
 // ── 판매자 본인용 (로그인 토큰 기준, sellerId 불필요) ──────────────────────
 
 export interface SellerSettlementSummary {
