@@ -31,9 +31,14 @@ export function getDropInfo(dropId: number) {
   return apiRequest<DropInfo>(`/api/v1/drops/${dropId}/info`);
 }
 
-/** 오늘 진행하는 드롭의 ID. 오늘 드롭이 없으면 C003 404. (역시 실제로는 인증 필요) */
-export function getTodayDropId() {
-  return apiRequest<number>("/api/v1/drops/today/drop");
+/**
+ * 오늘부터 days일 동안(기본 7일) UPCOMING/ACTIVE 상태인 드롭을 dropStart 오름차순으로 조회.
+ * 필드 구성은 `GET /drops/mine`(DropProductInfoResponse)과 동일. 인증 필요(403).
+ */
+export function getUpcomingDrops(days?: number) {
+  return apiRequest<DropProductInfoResponse[]>(
+    `/api/v1/drops/upcoming${days !== undefined ? `?days=${days}` : ""}`,
+  );
 }
 
 export interface QueueEnterResponse {

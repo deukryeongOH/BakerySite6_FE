@@ -57,7 +57,7 @@ export interface OrderDetail {
   orderState: OrderState;
   /** ⚠️ 백엔드 OrderDetailResponse에 totalAmount 필드가 없음 — orderItem.price * quantity로 계산해야 함. */
   orderItem: { dropId: number; dropName: string; price: number; quantity: number };
-  seller: { sellerId: number; sellerName: string | null };
+  seller: { sellerId: number; sellerName: string | null; address: string | null; phoneNumber: string | null };
   pickupDate: string;
   paidAt: string;
   confirmedAt: string | null;

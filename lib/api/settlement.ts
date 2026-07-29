@@ -134,6 +134,35 @@ export function getSettlement(settlementId: number) {
   return apiRequest<Settlement>(`/internal/v1/settlements/${settlementId}`);
 }
 
+export interface GetSettlementsParams {
+  sellerId?: number;
+  periodStart?: string;
+  periodEnd?: string;
+  status?: SettlementStatus;
+  page?: number;
+  size?: number;
+}
+
+export interface SettlementListResponse {
+  content: Settlement[];
+  page: number;
+  size: number;
+  hasNext: boolean;
+}
+
+/** 관리자용 전체 정산 목록 조회. 기간/판매자/상태 필터는 전부 선택값. */
+export function getSettlements(params: GetSettlementsParams = {}) {
+  const query = new URLSearchParams();
+  if (params.sellerId !== undefined) query.set("sellerId", String(params.sellerId));
+  if (params.periodStart) query.set("periodStart", params.periodStart);
+  if (params.periodEnd) query.set("periodEnd", params.periodEnd);
+  if (params.status) query.set("status", params.status);
+  if (params.page !== undefined) query.set("page", String(params.page));
+  if (params.size !== undefined) query.set("size", String(params.size));
+  const qs = query.toString();
+  return apiRequest<SettlementListResponse>(`/internal/v1/settlements${qs ? `?${qs}` : ""}`);
+}
+
 // ── 판매자 본인용 (로그인 토큰 기준, sellerId 불필요) ──────────────────────
 
 export interface SellerSettlementSummary {
@@ -173,6 +202,8 @@ export interface SellerSettlementLine {
 export interface SellerSettlementDetail extends SellerSettlementSummary {
   sellerId: number;
   netSalesAmount: number;
+  failureReason: string | null;
+  failedAt: string | null;
   lines: SellerSettlementLine[];
 }
 

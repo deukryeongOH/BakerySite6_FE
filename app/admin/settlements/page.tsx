@@ -5,8 +5,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as settlementApi from "@/lib/api/settlement";
+import type { SettlementStatus } from "@/lib/api/settlement";
 import { ApiException } from "@/lib/api/types";
 import { PayoutStatusBadge, SettlementStatusBadge } from "@/components/settlement-status-badge";
+
+type SettlementStatusFilter = SettlementStatus | "ALL";
+
+const SETTLEMENT_STATUS_TABS: { key: SettlementStatusFilter; label: string }[] = [
+  { key: "ALL", label: "전체" },
+  { key: "READY", label: "정산 대기" },
+  { key: "ON_HOLD", label: "보류" },
+  { key: "PAYING", label: "지급 중" },
+  { key: "COMPLETED", label: "지급 완료" },
+  { key: "FAILED", label: "지급 실패" },
+];
 
 const inputStyle = {
   background: COLORS.surface,
@@ -199,10 +211,36 @@ function BatchTab() {
 
 function PayoutTab() {
   const queryClient = useQueryClient();
-  const [settlementIdInput, setSettlementIdInput] = useState("");
+  const [statusFilter, setStatusFilter] = useState<SettlementStatusFilter>("ALL");
+  const [sellerIdFilter, setSellerIdFilter] = useState("");
+  const [page, setPage] = useState(0);
   const [settlementId, setSettlementId] = useState<number | null>(null);
   const [externalTxId, setExternalTxId] = useState<Record<number, string>>({});
   const [failureReason, setFailureReason] = useState<Record<number, string>>({});
+
+  const parsedSellerIdFilter = Number(sellerIdFilter);
+  const sellerIdFilterValid = sellerIdFilter !== "" && Number.isFinite(parsedSellerIdFilter) && parsedSellerIdFilter > 0;
+
+  const listQuery = useQuery({
+    queryKey: ["settlements", "list", statusFilter, sellerIdFilterValid ? parsedSellerIdFilter : null, page],
+    queryFn: () =>
+      settlementApi.getSettlements({
+        status: statusFilter === "ALL" ? undefined : statusFilter,
+        sellerId: sellerIdFilterValid ? parsedSellerIdFilter : undefined,
+        page,
+        size: 20,
+      }),
+  });
+
+  function changeStatusFilter(status: SettlementStatusFilter) {
+    setStatusFilter(status);
+    setPage(0);
+  }
+
+  function changeSellerIdFilter(value: string) {
+    setSellerIdFilter(value);
+    setPage(0);
+  }
 
   const settlementQuery = useQuery({
     queryKey: ["settlements", settlementId, "detail"],
@@ -217,8 +255,11 @@ function PayoutTab() {
     enabled: settlementId !== null && settlementQuery.isSuccess,
   });
 
-  const invalidatePayouts = () =>
+  const invalidatePayouts = () => {
     queryClient.invalidateQueries({ queryKey: ["settlements", settlementId, "payouts"] });
+    queryClient.invalidateQueries({ queryKey: ["settlements", settlementId, "detail"] });
+    queryClient.invalidateQueries({ queryKey: ["settlements", "list"] });
+  };
 
   /**
    * 서버는 같은 idempotencyKey로 재요청하면 (재시도 성공/실패 여부와 무관하게) 항상 최초 결과를
@@ -260,39 +301,111 @@ function PayoutTab() {
 
   return (
     <>
-      <div
-        className="rounded-xl p-3"
-        style={{ background: COLORS.accentSoft, border: `1px solid ${COLORS.border}` }}
-      >
-        <p className="text-xs" style={{ color: COLORS.accent }}>
-          관리자용 정산 전체 목록 조회 API가 아직 없어 정산 ID를 직접 입력해야 합니다. (ID 조회 시 판매자·금액은 확인됩니다)
-        </p>
-      </div>
+      {settlementId === null && (
+        <>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {SETTLEMENT_STATUS_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => changeStatusFilter(tab.key)}
+                className="px-3 py-1.5 rounded-full text-sm whitespace-nowrap shrink-0"
+                style={{
+                  background: statusFilter === tab.key ? COLORS.accent : COLORS.surface,
+                  color: statusFilter === tab.key ? COLORS.bg : COLORS.muted,
+                  border: statusFilter === tab.key ? "none" : `1px solid ${COLORS.border}`,
+                  fontWeight: statusFilter === tab.key ? 600 : 400,
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-      <div className="flex gap-2">
-        <input
-          placeholder="정산 ID"
-          value={settlementIdInput}
-          onChange={(e) => setSettlementIdInput(e.target.value)}
-          inputMode="numeric"
-          className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none"
-          style={inputStyle}
-        />
-        <button
-          type="button"
-          onClick={() => {
-            const id = Number(settlementIdInput);
-            if (Number.isFinite(id) && id > 0) setSettlementId(id);
-          }}
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold"
-          style={{ background: COLORS.accent, color: COLORS.bg }}
-        >
-          조회
-        </button>
-      </div>
+          <input
+            placeholder="sellerId로 필터 (선택)"
+            value={sellerIdFilter}
+            onChange={(e) => changeSellerIdFilter(e.target.value)}
+            inputMode="numeric"
+            className="px-4 py-2.5 rounded-lg text-sm outline-none"
+            style={inputStyle}
+          />
+
+          {listQuery.isLoading && (
+            <p className="text-sm" style={{ color: COLORS.muted }}>
+              불러오는 중...
+            </p>
+          )}
+          {listQuery.isError && (
+            <p className="text-sm" style={{ color: ERROR_COLOR }}>
+              {errorMessage(listQuery.error, "정산 목록을 불러오지 못했습니다.")}
+            </p>
+          )}
+          {listQuery.data && listQuery.data.content.length === 0 && (
+            <p className="text-sm" style={{ color: COLORS.muted }}>
+              조건에 맞는 정산이 없습니다.
+            </p>
+          )}
+
+          {listQuery.data?.content.map((settlement) => (
+            <button
+              key={settlement.settlementId}
+              type="button"
+              onClick={() => setSettlementId(settlement.settlementId)}
+              className="rounded-xl p-4 flex flex-col gap-2 text-left"
+              style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold" style={{ color: COLORS.text }}>
+                  판매자 #{settlement.sellerId}
+                </span>
+                <SettlementStatusBadge status={settlement.status} />
+              </div>
+              <span className="text-xs" style={{ color: COLORS.muted }}>
+                {settlement.periodStart} ~ {settlement.periodEnd} · {settlement.targetCount}건
+              </span>
+              <span className="text-lg font-bold" style={{ color: COLORS.accent }}>
+                지급액 {settlement.payoutAmount.toLocaleString()}원
+              </span>
+            </button>
+          ))}
+
+          {listQuery.data && (page > 0 || listQuery.data.hasNext) && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => p - 1)}
+                disabled={page === 0}
+                className="flex-1 py-2 rounded-lg text-xs disabled:opacity-40"
+                style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
+              >
+                이전
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={!listQuery.data.hasNext}
+                className="flex-1 py-2 rounded-lg text-xs disabled:opacity-40"
+                style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
+              >
+                다음
+              </button>
+            </div>
+          )}
+        </>
+      )}
 
       {settlementId !== null && (
         <>
+          <button
+            type="button"
+            onClick={() => setSettlementId(null)}
+            className="text-sm font-semibold text-left"
+            style={{ color: COLORS.accent }}
+          >
+            ← 목록으로
+          </button>
+
           {settlementQuery.isLoading && (
             <p className="text-sm" style={{ color: COLORS.muted }}>
               정산 정보를 불러오는 중...

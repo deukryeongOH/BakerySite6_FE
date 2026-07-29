@@ -8,79 +8,25 @@
 
 ## 미해결
 
-### 1. 예정된 드롭 목록 조회 (날짜별)
+**권장 처리 순서** (안전/사고 위험 → 비즈니스 임팩트 → 핵심 기능 공백 → 저비용 필드 추가 → 운영 편의 순, 2026-07-29 논의):
 
-- **요청일:** 2026-07-28
-- **관련 도메인:** drop (`docs/drop-api.md`)
-- **배경:** 홈 화면은 지금 `GET /drops/today/drop`으로 "오늘의 드롭" 딱 하나만 보여줍니다. 사용자가 오늘 것 말고 앞으로 며칠간 어떤 드롭이 예정돼 있는지 미리 훑어보고 싶어 하는데, 날짜별로 여러 드롭을 한 번에 내려주는 조회 API가 없습니다. `GET /drops/mine`은 판매자 본인 것만 조회하는 인증 API라 고객용 화면에는 쓸 수 없고, `GET /drops/{dropId}/info`는 dropId를 이미 알아야 하는 단건 조회라 목록 화면의 대안이 되지 못합니다.
-- **요청:** 특정 기간(또는 기본값: 오늘부터 N일) 동안 `UPCOMING`/`ACTIVE` 상태인 드롭을 `dropStart` 오름차순으로 내려주는 공개(또는 로그인) 조회 API. `docs/backend-bug-reports.md` §6에 따르면 현재 하루에 드롭이 플랫폼 전체 기준 최대 1개라, 응답은 사실상 "날짜 하나당 드롭 카드 하나" 형태가 됩니다 — 그 제약이 나중에 판매자별로 바뀌면 같은 날짜에 여러 드롭이 올 수 있으니 그때는 프론트에서 날짜별로 그룹핑하는 처리가 필요합니다.
-- **호출 시점(예상):** 홈 화면 진입 시.
-- **통신 기본 규격(제안):**
-    - **Method:** `GET`
-    - **Path:** `/api/v1/drops/upcoming`
-    - Query: `days`(선택, 기본값 7 등 — 오늘부터 며칠치를 볼지)
-    - Header: `Authorization` Bearer 토큰 (⚠️ `docs/backend-bug-reports.md` §4에 따르면 `/today/drop`, `/{dropId}/info`도 문서상 "공개 API"라 적혀 있지만 실제로는 토큰 없이 403이 나므로, 이 API도 동일하게 인증이 필요할 가능성이 높음 — 구현 시 확인 필요)
+| 순위 | 항목 | 사유 |
+| --- | --- | --- |
+| ~~1~~ | ~~관리자용 정산 단건 상세 조회~~ | **해결됨(2026-07-29)** — 아래 "해결됨" §5 참고 |
+| ~~2~~ | ~~판매자 본인 판매내역(주문) 목록 조회~~ | **해결됨(2026-07-29)** — 아래 "해결됨" §6 참고 |
+| ~~3~~ | ~~판매자에게 정산 실패 사유 노출~~ | **해결됨(2026-07-29)** — 아래 "해결됨" §7 참고 |
+| ~~4~~ | ~~주문 상세 응답에 판매자 연락처/주소 추가~~ | **해결됨(2026-07-29)** — 아래 "해결됨" §8 참고 |
+| ~~5~~ | ~~관리자용 전체 정산 목록 조회~~ | **해결됨(2026-07-29)** — 아래 "해결됨" §9 참고 |
+| ~~6~~ | ~~예정된 드롭 목록 조회 (날짜별)~~ | **해결됨(2026-07-29)** — 아래 "해결됨" §10 참고 |
+| 보류 | §1 판매자 재신청 엔드포인트 | **보류(2026-07-29)** — 제품 결정으로 재신청 기능 자체를 구현하지 않기로 함. 아래 §1 항목 참고 |
 
-**요청 명세(제안)**
-
-| 구분 | 필드명 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- | --- |
-| Header | `Authorization` | String | Y(추정) | Bearer 토큰 |
-| Query | `days` | int | N | 오늘부터 조회할 일수. 생략 시 서버 기본값 |
-
-**응답 명세(제안)**
-
-- `200 OK` — `GET /drops/mine`(`DropProductInfoResponse`)과 같은 필드 구성의 배열. `dropStart` 오름차순 정렬.
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "dropId": 12,
-      "name": "버터떡",
-      "description": "버터를 많이 써서 향이 좋고 쫀득해요.",
-      "imageUrl": "https://cdn.openbake.com/drops/12.jpg",
-      "pickUpAvailableDates": ["2026-08-02", "2026-08-03"],
-      "dropStart": "2026-08-01T14:00:00",
-      "dropEnd": "2026-08-01T18:00:00",
-      "limitQuantity": 5,
-      "price": 3000,
-      "totalQuantity": 200,
-      "remainQuantity": 200,
-      "dropStatus": "UPCOMING"
-    }
-  ]
-}
-```
-
-**해결되면 프론트에서 할 일**
-
-- 홈 화면(`app/(shop)/page.tsx`)을 "오늘의 드롭 카드 1개"에서 "날짜 헤더 + 그 날짜의 드롭 카드" 리스트로 교체.
-- 기존 `GET /drops/today/drop` 단건 조회 로직은 그대로 두거나, 목록의 첫 항목(가장 가까운 날짜)으로 대체할지 결정.
+> 우선순위 큐가 전부 소진됐습니다. 미해결 목록에는 보류 중인 §1(판매자 재신청)만 남아 있습니다.
 
 ---
 
-### 2. 관리자용 전체 정산 목록 조회
+### 1. 판매자 재신청 엔드포인트
 
-- **요청일:** 2026-07-29
-- **관련 도메인:** settlement (`docs/settlement-api.md`)
-- **배경:** 관리자 정산 화면(`app/admin/settlements/page.tsx`)에서 지급(payout) 시작/완료/실패 처리를 하려면 `settlementId`를 알아야 하는데, 이걸 조회할 방법이 없습니다. 판매자 본인 정산 조회(`GET /api/v1/sellers/me/settlements`, SET-API-002)는 로그인 토큰의 `sellerId`로만 동작해 관리자가 다른 판매자의 정산을 볼 수 없고, 월 정산 배치 실행/조회 API(SET-API-004/005/005b)는 `jobExecutionId`만 돌려줄 뿐 그 배치로 생성된 `settlementId` 목록을 알려주지 않습니다. 지금은 관리자가 정산 ID를 직접 입력하는 임시 UI로 우회했습니다(`app/admin/approvals/page.tsx`가 승인 대기 목록 API 생기기 전 판매자 ID 직접 입력 방식이었던 것과 동일한 패턴).
-- **요청:** 기간/판매자/상태 기준으로 `Settlement` 레코드(`settlementId`, `sellerId`, `periodStart`/`periodEnd`, 금액 필드들, `status`)를 나열하는 관리자 전용 목록 API.
-- **호출 시점(예상):** 관리자 정산 화면의 "지급 관리" 탭 진입 시.
-- **통신 기본 규격(제안):**
-    - **Method:** `GET`
-    - **Path:** `/internal/v1/settlements`
-    - Query: `periodStart`, `periodEnd`(선택), `sellerId`(선택), `status`(선택), `page`/`size`(기존 배치 목록 API와 동일한 페이지네이션 관례)
-
-**해결되면 프론트에서 할 일**
-
-- `app/admin/settlements/page.tsx`의 "지급 관리" 탭을 정산 ID 직접 입력에서 목록 API 기반 리스트 UI로 교체.
-
----
-
-### 3. 판매자 재신청 엔드포인트
-
+- **상태:** 보류 (2026-07-29) — 제품 결정으로 재신청 기능 자체를 구현하지 않기로 함. 구현 여부가 재논의되기 전까지 우선순위 큐에서 제외.
 - **요청일:** 2026-07-29
 - **관련 도메인:** seller (`docs/seller-api.md`)
 - **배경:** `Seller`-`Member`가 0..1 관계라, 신청 이력이 있으면(반려 포함) `POST /sellers/apply`가 `SE005`로 거부됩니다. `REJECTED` 상태에서 재신청할 방법이 없어, 사업자번호 오타 하나로 그 계정은 영구히 판매자가 될 수 없습니다(`app/seller/register/page.tsx:28-41`가 신청 이력이 있으면 무조건 `/seller/dashboard`로 리다이렉트). 사용자 플로우 개선 분석(2026-07-29)에서 발견된 판매자 온보딩 데드엔드입니다.
@@ -97,56 +43,7 @@
 
 ---
 
-### 4. 주문 상세 응답에 판매자 연락처/주소 추가
-
-- **요청일:** 2026-07-29
-- **관련 도메인:** order (`docs/order-api.md`)
-- **배경:** `app/(shop)/orders/[orderId]/page.tsx:100-111`에 "지도 보기"/"전화하기" 버튼이 있지만 `onClick`이 없어 동작하지 않습니다. `OrderDetail.seller`(`lib/api/order.ts:60`)에 주소/전화번호 필드 자체가 없어서 애초에 구현이 불가능한 상태입니다. 픽업 직전에 가장 많이 눌릴 만한 버튼이 장식으로만 남아있는 상황입니다.
-- **요청:** 주문 상세 조회(`GET /api/v1/orders/{id}`) 응답의 `seller` 객체에 `address`, `phoneNumber` 필드 추가.
-- **호출 시점(예상):** 주문 상세 화면 진입 시(기존 API 그대로, 응답 필드만 추가).
-
-**해결되면 프론트에서 할 일**
-
-- "지도 보기" 버튼에 주소 기반 지도 연결(또는 좌표 표시), "전화하기" 버튼에 `tel:` 링크 연결.
-
----
-
-### 5. 판매자에게 정산 실패 사유 노출
-
-- **요청일:** 2026-07-29
-- **관련 도메인:** settlement
-- **배경:** `SellerSettlementDetailResponse`(`GET /api/v1/sellers/me/settlements/{settlementId}`)에는 `status`만 있고 실패 사유가 없다. 실제 사유는 `SettlementPayout.failureReason`에 저장되지만 이건 admin 전용 `/internal/v1/settlement-payouts/{payoutId}` 계열로만 조회 가능하다. 정산이 `FAILED`가 되면 판매자는 빨간 "FAILED" 배지 하나만 보고 원인도, 다음 조치도 알 수 없는 상태로 남는다.
-- **요청:** 판매자 정산 상세 응답에 가장 최근 payout의 `failureReason`/`failedAt`(또는 그에 준하는 안내 문구 필드)을 포함.
-- **호출 시점(예상):** 판매자 정산 상세 화면 진입 시(기존 API 응답 필드만 추가).
-
-**해결되면 프론트에서 할 일**
-
-- `app/seller/settlements/[settlementId]/page.tsx`의 `FAILED` 상태 분기에 실패 사유 텍스트 노출.
-
----
-
 ## 해결됨
-
-### 6. 판매자 본인 판매내역(주문) 목록 조회 (대시보드 픽업 집계 포함)
-
-- **요청일:** 2026-07-28 / 2026-07-29 (아래 두 요청을 통합) / **해결일:** 2026-07-29
-- **관련 도메인:** order (`docs/order-api.md`)
-- **배경:** 판매자가 자신의 드롭에 걸린 주문을 확인하고 픽업 수령 후 [구매확정] 버튼을 누르려면, 먼저 자신의 판매내역을 주문 단위로 목록 조회할 수 있어야 했습니다. `GET /api/v1/orders`는 buyer 스코프라 재사용할 수 없고, `GET /drops/mine`으로는 개별 주문의 `orderId`를 알 방법이 없었습니다. 같은 갭에서 나온 대시보드용 "오늘 픽업 예정"/"날짜별 픽업 집계" 요청(원본 디자인 `SellerDashboardScreen`, M6에서 보류됨)과 통합해서 하나의 API로 요청했습니다.
-- **최종 스펙:** `GET /api/v1/sellers/me/orders` (`SellerOrderController`). Query `orderState`(선택, `PAID`/`CONFIRMED`/`CANCELED`), `page`(기본 0), `size`(기본 10, 최대 캡 적용). 판매자 권한 판정은 `PATCH /orders/{id}/confirm`과 동일하게 `CurrentSellerProvider.getSellerId()` 존재 여부로(미등록 계정은 403 `ME004`). 응답은 제안했던 스펙 그대로 구현됨 — `content[]`에 `orderId`/`dropId`/`dropName`/`buyerName`/`quantity`/`totalAmount`/`orderState`/`pickupDate`/`paidAt`/`confirmedAt`/`canceledAt`, `buyerName`은 `order.memberId`로 `Member`를 조회해서 채움.
-- **검증(2026-07-29):** 백엔드 유닛/컨트롤러 테스트(`OrderServiceTest`, `SellerOrderControllerTest`) 통과 확인. 로컬 서버(`:8080`)에 실제 로그인 토큰으로 호출해 정상 목록·필터 응답과 `PATCH /orders/{id}/confirm` 이후 목록에 `CONFIRMED`로 반영되는 것까지 실제 확인함(검증용으로 만든 임시 판매자/드롭/회원 데이터는 확인 후 정리함. 기존 판매자 `sellerId=6`의 `orderId=5`는 검증 과정에서 `CONFIRMED`로 확정됐고, 대신 동일 판매자에 새 `PAID` 주문 `orderId=7`을 만들어 남겨둠 — 브라우저에서 "구매확정" 버튼을 직접 눌러볼 수 있는 테스트 주문으로 사용 가능).
-- **프론트 반영 완료(2026-07-29):** `lib/api/seller-order.ts`의 `getSellerOrders`/`SellerOrderListItem`이 실제 응답과 이미 일치해 타입 변경 불필요(미구현 경고 주석만 제거). `app/seller/orders/page.tsx`(판매내역 화면)가 이 API로 정상 동작. `app/seller/dashboard/page.tsx`에 "오늘 픽업 예정"/"날짜별 픽업 집계" 위젯 추가(이 API 응답을 `pickupDate` 기준으로 그룹핑해서 클라이언트에서 계산).
-
----
-
-### 관리자용 정산 단건 상세 조회
-
-- **요청일:** 2026-07-29 / **해결일:** 2026-07-29
-- **관련 도메인:** settlement (`docs/settlement-api.md`)
-- **배경:** `app/admin/settlements/page.tsx`의 지급 관리 탭이 정산 ID만으로 지급 이력만 보여주고, 판매자·기간·금액을 확인할 방법이 없어 관리자가 대상을 눈으로 확인하지 못한 채 지급을 시작하는 문제였습니다.
-- **최종 스펙:** `GET /internal/v1/settlements/{settlementId}` → `ApiResponse<SettlementResponse>`. 필드: `settlementId`, `sellerId`, `periodStart`, `periodEnd`, `grossSalesAmount`, `commissionAmount`, `netSalesAmount`, `adjustmentAmount`, `payoutAmount`, `targetCount`, `status`, `createdAt`, `completedAt` — 제안했던 스펙 그대로 구현됨(`AdminSettlementController`/`SettlementQueryService`). `settlementId`≤0이면 400, 없으면 404.
-- **프론트 반영 완료(2026-07-29):** `lib/api/settlement.ts`에 `getSettlement(settlementId)` 추가. `app/admin/settlements/page.tsx`의 `PayoutTab`이 ID 조회 시 이 API로 정산 요약 카드(판매자, 기간, 금액, 상태 배지)를 지급 이력 위에 먼저 보여주고, 조회에 성공한 뒤에만 지급 이력/지급 시작 컨트롤이 나타나도록 변경. "지급 시작" 확인 다이얼로그에도 실제 판매자 ID·지급액을 포함.
-
----
 
 ### 1. 내 판매자 신청 조회
 
@@ -182,3 +79,103 @@
 - **배경:** 결제 화면(`app/order/order-view.tsx`)에서 이탈하면 프론트가 `DELETE /cart`를 호출해 재고 선점만 해제하는데, 대기열 참여 이력(`DropEntry`)이 그대로 남아있다면 재입장 시 `enterQueue`가 409 `DR006`을 반환해 그 드롭을 다시는 살 수 없게 될 것을 우려했습니다.
 - **확인 결과:** `CartService.deleteCart`(`CartService.java:233-238`)가 삭제 전 `DropLockService.rollbackStock`을 호출하고, 여기서 `DropEntry.failEntry()`로 상태를 `FAILED`로 전환합니다(`DropLockService.java:48-56`). `DropEnterService.enterQueue`의 재입장 차단 조건(`blockStatuses`)은 `RESERVED`, `COMPLETED`만 포함하고(`DropEnterService.java:60`) `FAILED`는 애초에 포함된 적이 없습니다 — 즉 `DELETE /cart` 이후 같은 드롭에 다시 `enterQueue`를 호출해도 차단되지 않습니다. (부가적으로 오늘 커밋 `4b79d46`에서 `ENTERED` 상태도 blockStatuses에서 제외되어, 대기열 통과 후 상세만 보고 나간 경우의 재진입도 함께 허용되도록 정리됐습니다.)
 - **프론트 반영:** 별도 작업 불필요 — 우려했던 데드엔드가 현재 코드상 발생하지 않음을 확인.
+
+---
+
+### 5. 관리자용 정산 단건 상세 조회 (판매자/금액 확인 없이 지급 실행됨)
+
+- **요청일:** 2026-07-29 / **해결일:** 2026-07-29
+- **관련 도메인:** settlement (`docs/settlement-api.md`, `docs/OpenBake_API_명세서.md` §9)
+- **배경:** `app/admin/settlements/page.tsx`의 지급 관리 탭은 정산 ID를 입력하면 지급 이력(`GET /internal/v1/settlements/{id}/payouts`)만 보여줄 뿐, 그 정산이 어느 판매자의 것인지·기간·금액이 얼마인지 확인할 방법이 전혀 없어 관리자가 판매자/금액을 눈으로 확인하지 못한 채 "지급 시작" 버튼을 눌러 실제 송금 절차를 시작하는 문제였습니다. 우선순위 1위(정산 사고 위험 안전장치)로 판단해 가장 먼저 구현했습니다.
+- **최종 스펙:** `GET /internal/v1/settlements/{settlementId}` — `settlementId`, `sellerId`, `periodStart`/`periodEnd`, `grossSalesAmount`, `commissionAmount`, `netSalesAmount`, `adjustmentAmount`, `payoutAmount`, `targetCount`, `status`, `createdAt`, `completedAt`을 반환. `/internal/v1/**`는 기존과 동일하게 `SecurityConfig`의 `hasRole("ADMIN")`으로 보호됩니다.
+- **백엔드 구현 완료(2026-07-29):**
+    - `AdminSettlementController`(`src/main/java/com/openbake/settlement/presentation/AdminSettlementController.java`) 신규 추가 — `GET /internal/v1/settlements/{settlementId}`.
+    - `SettlementQueryService`/`SettlementResult`(application 계층), `SettlementResponse`(presentation DTO) 신규 추가. 기존 `SettlementRepository.findById`를 그대로 재사용해 추가 리포지토리 변경 없음.
+    - 정산을 찾을 수 없으면 기존 관례대로 `EntityNotFoundException` → 404 `C003`.
+    - 단위 테스트(`SettlementQueryServiceTest`) 3건, 컨트롤러 테스트(`AdminSettlementControllerTest`) 1건 추가, 전체 그린 확인. (참고: 같은 패키지의 다른 컨트롤러 테스트 다수가 `@AutoConfigureMockMvc(addFilters = false)` 누락으로 목(mock) JWT 필터가 요청을 그냥 삼켜버려 주석 처리돼 있었음 — 새 테스트는 이 옵션을 추가해 정상 동작을 확인함.)
+- **해결되면 프론트에서 할 일**
+    - `app/admin/settlements/page.tsx`의 `PayoutTab`에서 ID 조회 시 지급 이력 목록 위에 정산 요약 카드(판매자 ID, 기간, 지급액) 노출.
+    - "지급 시작" 버튼 클릭 시 이 정보를 포함한 확인 다이얼로그 추가(`docs/ux-improvement-plan.md` §7과 연계).
+
+---
+
+### 6. 판매자 본인 판매내역(주문) 목록 조회 (대시보드 픽업 집계 포함)
+
+- **요청일:** 2026-07-28 / 2026-07-29 / **해결일:** 2026-07-29
+- **관련 도메인:** order (`docs/order-api.md`)
+- **배경:** 판매자가 자신의 드롭에 걸린 주문을 확인하고 픽업 수령 후 [구매확정] 버튼을 누르려면 먼저 자신의 판매내역을 주문 단위로 목록 조회할 수 있어야 하는데, `GET /api/v1/orders`는 buyer 스코프라 재사용할 수 없고 `GET /drops/mine`으로는 개별 주문의 `orderId`를 알 방법이 없어 이미 구현된 구매확정(`PATCH /orders/{id}/confirm`)을 실사용하지 못하는 상태였습니다. 판매자 대시보드의 "오늘 픽업 예정"/"날짜별 픽업 집계" 위젯 요구사항도 같은 API 갭에서 나온 것이라 하나로 통합해 처리했습니다.
+- **최종 스펙:** `GET /api/v1/sellers/me/orders` — Query `orderState`(선택, `PAID`/`CONFIRMED`/`CANCELED`), `page`(선택, Default 0), `size`(선택, Default 10, 상한 50). 응답은 `orderId`, `dropId`, `dropName`, `buyerName`, `quantity`, `totalAmount`, `orderState`, `pickupDate`, `paidAt`, `confirmedAt`, `canceledAt`을 담은 페이지 목록. 판매자 권한 판정은 로그인 계정의 `sellerId` 존재 여부로(미등록/미승인 계정은 403 `ME004`), 제안했던 스펙 그대로 구현됨.
+- **백엔드 구현 완료(2026-07-29):**
+    - `SellerOrderController`(`src/main/java/com/openbake/order/presentation/SellerOrderController.java`) 신규 추가 — `GET /api/v1/sellers/me/orders`.
+    - `OrderService.getSellerOrders`(기존 `OrderService`에 메서드 추가, `confirm()`과 동일하게 `CurrentSellerProvider`로 sellerId를 판정) — 기존 buyer 스코프 `getOrders`와 대칭 구조.
+    - `OrderRepository`에 `findBySellerIdOrderByOrderIdDesc`/`findBySellerIdAndOrderStateOrderByOrderIdDesc` 추가.
+    - `SellerOrderSummaryResponse`/`SellerOrderPageResponse`(presentation DTO) 신규 추가. `buyerName`은 `MemberRepository`로 조회(신규 의존성 추가).
+    - 단위 테스트(`OrderServiceTest`) 3건, 컨트롤러 테스트(`SellerOrderControllerTest`) 1건 추가 — order 도메인에 기존 테스트가 전무해 이번에 처음 추가됨. 전체 테스트 스위트(178건) 그린 확인.
+- **해결되면 프론트에서 할 일**
+    - `lib/api/seller-order.ts`의 `getSellerOrders`/`SellerOrderListItem` 타입을 실제 응답 필드에 맞춰 조정.
+    - `app/seller/orders/page.tsx`(판매내역 화면)가 이 API로 정상 동작하는지 확인.
+    - `app/seller/dashboard/page.tsx`에 "오늘 픽업 예정"/"날짜별 픽업 집계" 위젯 추가(원본 디자인의 `SellerDashboardScreen` 참고) — 이 API 응답을 `pickupDate` 기준으로 그룹핑해서 클라이언트에서 계산.
+
+---
+
+### 7. 판매자에게 정산 실패 사유 노출
+
+- **요청일:** 2026-07-29 / **해결일:** 2026-07-29
+- **관련 도메인:** settlement
+- **배경:** `SellerSettlementDetailResponse`(`GET /api/v1/sellers/me/settlements/{settlementId}`)에는 `status`만 있고 실패 사유가 없어, 정산이 `FAILED`가 되면 판매자는 빨간 배지만 보고 원인도 다음 조치도 알 수 없는 상태로 남는 문제였습니다.
+- **최종 스펙:** 판매자 정산 상세 응답에 가장 최근 payout의 `failureReason`/`failedAt` 필드를 추가. payout 이력이 없거나 아직 실패한 적이 없으면 둘 다 `null`. 제안했던 스펙 그대로 구현됨.
+- **백엔드 구현 완료(2026-07-29):**
+    - `SellerSettlementDetailResult`/`SellerSettlementDetailResponse`에 `failureReason`, `failedAt` 필드 추가.
+    - `SellerSettlementQueryService.getSettlement`에서 `SettlementPayoutRepository.findAllBySettlementId`(기존에 `requestedAt` 내림차순으로 정렬돼 있던 메서드 재사용)의 첫 번째 항목을 "가장 최근 payout"으로 간주해 값을 채움. 새 리포지토리 메서드 추가 없음.
+    - 단위 테스트(`SellerSettlementQueryServiceTest`) 3건 추가 — settlement 도메인의 이 서비스에 기존 테스트가 없어 이번에 처음 추가됨.
+- **해결되면 프론트에서 할 일**
+    - `app/seller/settlements/[settlementId]/page.tsx`의 `FAILED` 상태 분기에 실패 사유 텍스트 노출.
+
+---
+
+### 8. 주문 상세 응답에 판매자 연락처/주소 추가
+
+- **요청일:** 2026-07-29 / **해결일:** 2026-07-29
+- **관련 도메인:** order (`docs/order-api.md`)
+- **배경:** `app/(shop)/orders/[orderId]/page.tsx:100-111`의 "지도 보기"/"전화하기" 버튼이 `OrderDetail.seller`에 주소/전화번호 필드가 없어 애초에 구현이 불가능한 상태였습니다.
+- **최종 스펙:** 주문 상세 조회(`GET /api/v1/orders/{id}`) 응답의 `seller` 객체에 `address`, `phoneNumber` 필드 추가. 제안했던 스펙 그대로 구현됨.
+- **백엔드 구현 완료(2026-07-29):**
+    - `OrderDetailResponse.SellerInfo`에 `address`, `phoneNumber` 필드 추가.
+    - `OrderService`에 `resolveSellerInfo` 신규 추가 — `address`는 `Seller.businessAddress`, `phoneNumber`는 `Seller`가 직접 갖지 않아 연결된 `Member.phoneNumber`를 조회(§6 작업 때 추가한 `MemberRepository` 의존성 재사용). 판매자/회원 정보가 없으면 해당 필드는 `null`.
+    - 단위 테스트(`OrderServiceTest`에 2건 추가: 정상 케이스, 판매자 정보 없는 케이스) — 전체 테스트 스위트(183건) 그린 확인.
+- **해결되면 프론트에서 할 일**
+    - "지도 보기" 버튼에 주소 기반 지도 연결(또는 좌표 표시), "전화하기" 버튼에 `tel:` 링크 연결.
+
+---
+
+### 9. 관리자용 전체 정산 목록 조회
+
+- **요청일:** 2026-07-29 / **해결일:** 2026-07-29
+- **관련 도메인:** settlement (`docs/settlement-api.md`)
+- **배경:** 관리자 정산 화면(`app/admin/settlements/page.tsx`)에서 지급 처리를 하려면 `settlementId`를 알아야 하는데, 관리자가 정산 ID를 직접 입력하는 임시 UI로 우회하고 있었습니다.
+- **최종 스펙:** `GET /internal/v1/settlements` — Query `sellerId`(선택), `periodStart`/`periodEnd`(선택, ISO 날짜), `status`(선택, `SettlementStatus`), `page`(선택, Default 0), `size`(선택, Default 20, 상한 100 — 기존 `MonthlySettlementBatchQueryService`와 동일한 관례). 응답은 `content`/`page`/`size`/`hasNext` 구조(`totalElements`/`totalPages` 없음 — 역시 배치 목록 API와 동일한 관례). `periodStart`/`periodEnd` 필터는 "정산 기간이 조회 범위 안에 포함되는지"(`settlement.periodStart >= periodStart`, `settlement.periodEnd <= periodEnd`) 기준으로 동작합니다. 제안했던 스펙 그대로 구현됨.
+- **백엔드 구현 완료(2026-07-29):**
+    - `AdminSettlementController`에 `GET /internal/v1/settlements`(파라미터 없는 목록 조회) 추가 — 기존 단건 조회(`GET /internal/v1/settlements/{settlementId}`)와 같은 컨트롤러.
+    - `SettlementRepository`(도메인 포트)에 `search(sellerId, periodStart, periodEnd, status, page, size)` 추가. 도메인 계층에는 Spring Data `Page`/`Pageable`을 노출하지 않는 기존 관례를 유지 — `size + 1`건을 조회해 `hasNext`를 판정하는 방식은 `MonthlySettlementBatchQueryService`와 동일.
+    - `SettlementJpaRepository`에 nullable 파라미터를 처리하는 `@Query` 기반 `search` 메서드 추가(인프라 계층에서만 `Pageable` 사용).
+    - `SettlementQueryService.search`, `SettlementListResult`(application), `SettlementListResponse`(presentation) 신규 추가.
+    - 단위 테스트(`SettlementQueryServiceTest`에 3건 추가), 컨트롤러 테스트(`AdminSettlementControllerTest`에 1건 추가) — 전체 테스트 스위트(187건) 그린 확인.
+- **해결되면 프론트에서 할 일**
+    - `app/admin/settlements/page.tsx`의 "지급 관리" 탭을 정산 ID 직접 입력에서 목록 API 기반 리스트 UI로 교체.
+
+---
+
+### 10. 예정된 드롭 목록 조회 (날짜별)
+
+- **요청일:** 2026-07-28 / **해결일:** 2026-07-29
+- **관련 도메인:** drop (`docs/drop-api.md`)
+- **배경:** 홈 화면은 `GET /drops/today/drop`으로 "오늘의 드롭" 딱 하나만 보여줄 수 있어서, 사용자가 앞으로 며칠간 예정된 드롭을 미리 훑어볼 방법이 없었습니다.
+- **최종 스펙:** `GET /api/v1/drops/upcoming` — Query `days`(선택, Default 7). 오늘부터 `days`일 동안 `UPCOMING`/`ACTIVE` 상태인 드롭을 `dropStart` 오름차순으로 반환. 응답은 `GET /drops/mine`과 동일한 `DropProductInfoResponse` 배열. 제안했던 스펙 그대로 구현됨. 인증 관련 우려(⚠️ 참고)는 실제로 확인됨 — `SecurityConfig`에 `/api/v1/drops/**`에 대한 별도 `permitAll` 규칙이 없어 기본 정책(`anyRequest().authenticated()`)을 그대로 따르므로, 이 API도 다른 drop 엔드포인트와 동일하게 인증이 필요합니다(SecurityConfig 변경 없이 기존 동작 그대로).
+- **백엔드 구현 완료(2026-07-29):**
+    - `DropController`에 `GET /api/v1/drops/upcoming` 추가.
+    - `DropService.getUpcomingDrops(days)` 신규 추가 — 조회 범위는 오늘 00:00부터 `오늘+days`일 23:59:59:59까지(오늘 이미 시작된 `ACTIVE` 드롭도 포함되도록 시작 시각을 자정 기준으로 잡음). `days`가 0 이하면 `IllegalArgumentException`.
+    - `DropRepository`(도메인 포트)에 `findByDropStatusInAndDropStartBetweenOrderByDropStartAsc` 추가 — 기존 `getMyDrops`와 동일하게 `DropInventoryRepository.findByDropId`를 드롭별로 호출해 응답을 조립(N+1이지만 기존 관례를 그대로 따름).
+    - 단위 테스트(`DropServiceTest`에 2건 추가), 컨트롤러 테스트(`DropControllerTest` 신규 2건) — drop 프레젠테이션 계층에 컨트롤러 테스트가 전무해 이번에 처음 추가됨. 전체 테스트 스위트(191건) 그린 확인.
+- **해결되면 프론트에서 할 일**
+    - 홈 화면(`app/(shop)/page.tsx`)을 "오늘의 드롭 카드 1개"에서 "날짜 헤더 + 그 날짜의 드롭 카드" 리스트로 교체.
+    - 기존 `GET /drops/today/drop` 단건 조회 로직은 그대로 두거나, 목록의 첫 항목(가장 가까운 날짜)으로 대체할지 결정.

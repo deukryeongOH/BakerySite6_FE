@@ -119,6 +119,12 @@ export default function MySettlementDetailPage() {
                   {STATUS_MESSAGE[settlement.status]!.text}
                 </p>
               )}
+              {settlement.status === "FAILED" && settlement.failureReason && (
+                <p className="text-xs" style={{ color: ERROR_COLOR }}>
+                  사유: {settlement.failureReason}
+                  {settlement.failedAt && ` (${fmtDateTime(settlement.failedAt)})`}
+                </p>
+              )}
 
               <div className="text-center py-3">
                 <span className="text-3xl font-bold" style={{ color: COLORS.accent }}>

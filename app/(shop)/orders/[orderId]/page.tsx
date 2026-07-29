@@ -98,13 +98,24 @@ export default function OrderDetailPage() {
                     </p>
                     <div className="flex gap-2">
                       <button
-                        className="flex-1 py-2.5 rounded-lg text-sm flex items-center justify-center gap-1.5"
+                        onClick={() =>
+                          window.open(
+                            `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.seller.address!)}`,
+                            "_blank",
+                          )
+                        }
+                        disabled={!order.seller.address}
+                        className="flex-1 py-2.5 rounded-lg text-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
                         style={{ border: `1.5px solid ${COLORS.border}`, color: COLORS.text }}
                       >
                         <MapPin size={13} /> 지도 보기
                       </button>
                       <button
-                        className="flex-1 py-2.5 rounded-lg text-sm flex items-center justify-center gap-1.5"
+                        onClick={() => {
+                          window.location.href = `tel:${order.seller.phoneNumber}`;
+                        }}
+                        disabled={!order.seller.phoneNumber}
+                        className="flex-1 py-2.5 rounded-lg text-sm flex items-center justify-center gap-1.5 disabled:opacity-40"
                         style={{ border: `1.5px solid ${COLORS.border}`, color: COLORS.text }}
                       >
                         <Phone size={13} /> 전화하기

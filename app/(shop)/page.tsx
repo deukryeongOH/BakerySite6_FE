@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Wallet } from "lucide-react";
@@ -9,9 +9,8 @@ import { BreadBox } from "@/components/bread-box";
 import { DropBadge } from "@/components/drop-badge";
 import * as dropApi from "@/lib/api/drop";
 import * as paymentApi from "@/lib/api/payment";
-import { ApiException } from "@/lib/api/types";
 import { toDropStatus } from "@/lib/types";
-import { pad, msToHMS, fmtDateTime } from "@/lib/format";
+import { pad, msToHMS, fmtDateTime, fmtPickup } from "@/lib/format";
 
 export default function HomePage() {
   const [now, setNow] = useState(() => new Date());
@@ -25,24 +24,25 @@ export default function HomePage() {
     queryFn: paymentApi.getDepositAccount,
   });
 
-  const todayDropQuery = useQuery({
-    queryKey: ["today-drop"],
-    queryFn: dropApi.getTodayDropId,
-    retry: false,
+  const upcomingQuery = useQuery({
+    queryKey: ["upcoming-drops"],
+    queryFn: () => dropApi.getUpcomingDrops(),
   });
 
-  const noDropToday =
-    todayDropQuery.isError &&
-    todayDropQuery.error instanceof ApiException &&
-    todayDropQuery.error.code === "C003";
+  const drops = upcomingQuery.data ?? [];
+  const drop = drops[0] ?? null;
+  const laterDrops = drops.slice(1);
 
-  const dropInfoQuery = useQuery({
-    queryKey: ["drop-info", todayDropQuery.data],
-    queryFn: () => dropApi.getDropInfo(todayDropQuery.data!),
-    enabled: todayDropQuery.data !== undefined,
-  });
+  const dateGroups = useMemo(() => {
+    const map = new Map<string, typeof laterDrops>();
+    for (const d of laterDrops) {
+      const dateStr = d.dropStart.slice(0, 10);
+      if (!map.has(dateStr)) map.set(dateStr, []);
+      map.get(dateStr)!.push(d);
+    }
+    return Array.from(map.entries());
+  }, [laterDrops]);
 
-  const drop = dropInfoQuery.data;
   const status = drop ? toDropStatus(drop.dropStatus, drop.remainQuantity) : null;
   const target = drop
     ? status === "SCHEDULED"
@@ -75,19 +75,19 @@ export default function HomePage() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {todayDropQuery.isLoading && (
+        {upcomingQuery.isLoading && (
           <p className="text-sm text-center mt-10" style={{ color: COLORS.muted }}>
             불러오는 중...
           </p>
         )}
 
-        {noDropToday && (
+        {upcomingQuery.data && drops.length === 0 && (
           <div
             className="mx-4 mt-4 rounded-2xl px-5 py-8 text-center"
             style={{ background: COLORS.accentSoft, border: `1px solid ${COLORS.border}` }}
           >
             <p className="text-sm" style={{ color: COLORS.muted }}>
-              오늘 예정된 드롭이 없습니다
+              예정된 드롭이 없습니다
             </p>
           </div>
         )}
@@ -135,7 +135,7 @@ export default function HomePage() {
 
             <div className="px-4 mt-4">
               <Link
-                href={`/drops/${todayDropQuery.data}`}
+                href={`/drops/${drop.dropId}`}
                 className="block rounded-xl overflow-hidden"
                 style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
               >
@@ -166,6 +166,54 @@ export default function HomePage() {
               </Link>
             </div>
           </>
+        )}
+
+        {dateGroups.length > 0 && (
+          <div className="mt-6 flex flex-col gap-5">
+            <span className="px-4 text-sm font-semibold" style={{ color: COLORS.text }}>
+              다가오는 드롭
+            </span>
+            {dateGroups.map(([dateStr, groupDrops]) => (
+              <div key={dateStr}>
+                <span className="px-4 text-xs font-semibold" style={{ color: COLORS.muted }}>
+                  {fmtPickup(dateStr)}
+                </span>
+                <div className="flex gap-3 px-4 mt-2 overflow-x-auto pb-1">
+                  {groupDrops.map((d) => {
+                    const dStatus = toDropStatus(d.dropStatus, d.remainQuantity);
+                    return (
+                      <Link
+                        key={d.dropId}
+                        href={`/drops/${d.dropId}`}
+                        className="flex-shrink-0 w-[148px] rounded-xl overflow-hidden"
+                        style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}` }}
+                      >
+                        <div className="relative">
+                          <BreadBox
+                            label={d.name}
+                            className="w-full h-[148px]"
+                            src={d.imageUrl}
+                            dim={dStatus === "SOLD_OUT" || dStatus === "CLOSED"}
+                          />
+                          <div className="absolute top-2 left-2">
+                            <DropBadge status={dStatus} />
+                          </div>
+                        </div>
+                        <div className="p-2.5">
+                          <p className="text-sm font-semibold" style={{ color: COLORS.text }}>
+                            {d.name}
+                          </p>
+                          <p className="text-sm" style={{ color: COLORS.text }}>
+                            {d.price.toLocaleString()}원
+                          </p>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
         <div className="h-4" />
       </div>

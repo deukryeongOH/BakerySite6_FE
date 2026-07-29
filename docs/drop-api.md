@@ -21,6 +21,7 @@
 | GET | `/api/v1/drops/mine` | 판매자 본인이 등록한 드롭 목록 조회 |
 | PATCH | `/api/v1/drops/{dropId}` | 판매자 본인이 등록한 드롭 수정 (시작 전만 가능) |
 | DELETE | `/api/v1/drops/{dropId}` | 판매자 본인이 등록한 드롭 삭제 (시작 전만 가능) |
+| GET | `/api/v1/drops/upcoming` | 예정된 드롭 목록 조회 (날짜별, days 기본 7) |
 
 ## 2. 드롭 상세 정보 표시
 
@@ -476,6 +477,77 @@ JSON
   }
 }
 ```
+
+## 10. 예정된 드롭 목록 조회 (날짜별)
+
+### 10.1 기본 정보
+
+- 설명: 오늘부터 지정한 일수(`days`) 동안 시작 전(`UPCOMING`) 또는 진행 중(`ACTIVE`)인 드롭을 `dropStart` 오름차순으로 조회한다. 홈 화면이 "오늘의 드롭" 단건만 보여주던 한계를 해소하기 위해 `docs/backend-api-requests.md` #1로 프론트에서 요청해 2026-07-29 구현됨(`DropController.getUpcomingDrops`).
+- 호출 시점: 홈 화면 진입 시.
+
+### 10.2 요청 파라미터
+
+| **구분** | **필드명** | **타입** | **필수 여부** | **설명 / 제약 조건** |
+| --- | --- | --- | --- | --- |
+| Header | `Authorization` | String | Y | Bearer 토큰. 문서상 다른 드롭 조회 API들처럼 "공개 API"로 보일 수 있으나 실제로는 인증이 필요하다(토큰 없이 호출 시 403). |
+| Query | `days` | int | N | 오늘부터 조회할 일수. 생략 시 7. 0 이하면 400. |
+
+### 10.2.1 요청 예시
+
+```
+GET /api/v1/drops/upcoming?days=7 HTTP/1.1
+Authorization: Bearer {accessToken}
+```
+
+### 10.3 응답 파라미터
+
+`GET /drops/mine`과 동일한 `DropProductInfoResponse` 배열(`dropStart` 오름차순).
+
+| **필드명** | **타입** | **필수 여부** | **설명 / 제약 조건** |
+| --- | --- | --- | --- |
+| `dropId` | Long | Y | 드롭 ID |
+| `name` | String | Y | 상품명 |
+| `description` | String | Y | 상품 설명 |
+| `imageUrl` | String | Y | 이미지 URL |
+| `pickUpAvailableDates` | Array | Y | 픽업 가능 날짜 목록 |
+| `dropStart` | LocalDateTime | Y | 드롭 시작 시각 |
+| `dropEnd` | LocalDateTime | Y | 드롭 마감 시각 |
+| `limitQuantity` | int | Y | 1인당 구매 제한 수량 |
+| `price` | int | Y | 단가 |
+| `totalQuantity` | int | Y | 총 발매 수량 |
+| `remainQuantity` | int | Y | 남은 재고 |
+| `dropStatus` | String | Y | `UPCOMING`/`ACTIVE` |
+
+### 10.3.1 응답 예시
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "dropId": 12,
+      "name": "버터떡",
+      "description": "버터를 많이 써서 향이 좋고 쫀득해요.",
+      "imageUrl": "https://cdn.openbake.com/drops/12.jpg",
+      "pickUpAvailableDates": ["2026-08-02", "2026-08-03"],
+      "dropStart": "2026-08-01T14:00:00",
+      "dropEnd": "2026-08-01T18:00:00",
+      "limitQuantity": 5,
+      "price": 3000,
+      "totalQuantity": 200,
+      "remainQuantity": 200,
+      "dropStatus": "UPCOMING"
+    }
+  ]
+}
+```
+
+### 10.4 예외 및 에러 처리
+
+| **HTTP Status** | **에러 코드** | **에러 메시지 (Message)** | **발생 시나리오** |
+| --- | --- | --- | --- |
+| 401/403 | - | (Spring Security 기본 처리) | 토큰 없이 호출 |
+| 500 | - | `IllegalArgumentException` | `days`가 0 이하 |
 
 ## 1. 판매자 본인이 등록한 드롭 목록 조회
 
