@@ -182,6 +182,13 @@ export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi
           </div>
         )}
 
+        {/* ON_SALE에는 상단에 어두운 오버레이가 따로 없어서, 밝은 색 빵 사진 위에서
+            반투명 흰 배경 버튼이 안 보이는 걸 막기 위한 스크림 */}
+        <div
+          className="absolute top-0 left-0 right-0 h-20 pointer-events-none"
+          style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.45), rgba(0,0,0,0))" }}
+        />
+
         <button
           onClick={() => router.push("/")}
           className="absolute top-12 left-4 w-9 h-9 rounded-full flex items-center justify-center"
