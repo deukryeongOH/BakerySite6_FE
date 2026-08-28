@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as dropApi from "@/lib/api/drop";
+import { DROP_CATEGORY_LABELS, type DropCategory } from "@/lib/api/drop";
 import * as sellerApi from "@/lib/api/seller";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ApiException } from "@/lib/api/types";
@@ -48,9 +49,9 @@ export default function NewDropPage() {
     price: "",
     totalQuantity: "",
     limitQuantity: "",
-    dropPeriodStart: "",
-    dropPeriodEnd: "",
+    dropStart: "",
   });
+  const [category, setCategory] = useState<DropCategory | "">("");
   const [pickupStart, setPickupStart] = useState("");
   const [pickupEnd, setPickupEnd] = useState("");
   const pickupDates = expandDateRange(pickupStart, pickupEnd);
@@ -62,11 +63,11 @@ export default function NewDropPage() {
         description: form.description,
         imageUrl: form.imageUrl,
         pickUpAvailableDates: pickupDates,
-        dropStart: `${form.dropPeriodStart}:00`,
-        dropEnd: `${form.dropPeriodEnd}:00`,
+        dropStart: `${form.dropStart}:00`,
         limitQuantity: Number(form.limitQuantity),
         price: Number(form.price),
         totalQuantity: Number(form.totalQuantity),
+        category: category as DropCategory,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["myDrops"] });
@@ -110,6 +111,21 @@ export default function NewDropPage() {
           style={inputStyle}
         />
 
+        <select
+          required
+          value={category}
+          onChange={(e) => setCategory(e.target.value as DropCategory)}
+          className={inputClass}
+          style={inputStyle}
+        >
+          <option value="">카테고리 선택</option>
+          {(Object.keys(DROP_CATEGORY_LABELS) as DropCategory[]).map((key) => (
+            <option key={key} value={key}>
+              {DROP_CATEGORY_LABELS[key]}
+            </option>
+          ))}
+        </select>
+
         <div className="flex gap-2">
           <input
             required
@@ -150,24 +166,14 @@ export default function NewDropPage() {
           <input
             required
             type="datetime-local"
-            value={form.dropPeriodStart}
-            onChange={(e) => setForm((f) => ({ ...f, dropPeriodStart: e.target.value }))}
+            value={form.dropStart}
+            onChange={(e) => setForm((f) => ({ ...f, dropStart: e.target.value }))}
             className={inputClass}
             style={inputStyle}
           />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs" style={{ color: COLORS.muted }}>
-            드롭 마감 일시
-          </label>
-          <input
-            required
-            type="datetime-local"
-            value={form.dropPeriodEnd}
-            onChange={(e) => setForm((f) => ({ ...f, dropPeriodEnd: e.target.value }))}
-            className={inputClass}
-            style={inputStyle}
-          />
+          <p className="text-xs" style={{ color: COLORS.muted }}>
+            마감은 시작 1시간 뒤로 자동 설정됩니다.
+          </p>
         </div>
 
         <div className="flex flex-col gap-1.5">

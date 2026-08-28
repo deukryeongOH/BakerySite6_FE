@@ -405,7 +405,7 @@ export default function SellerDashboardPage() {
                   <div className="flex gap-2 pt-2" style={{ borderTop: `1px solid ${COLORS.border}` }}>
                     <Link
                       href={`/seller/drops/${drop.dropId}/edit`}
-                      className="flex-1 py-2 rounded-lg text-sm text-center"
+                      className="flex-1 py-2 rounded-lg text-sm text-center transition-colors hover:bg-[#2A2118]"
                       style={{ border: `1px solid ${COLORS.border}`, color: COLORS.text }}
                     >
                       수정
@@ -413,7 +413,7 @@ export default function SellerDashboardPage() {
                     <button
                       onClick={() => handleDelete(drop.dropId)}
                       disabled={deleteMutation.isPending}
-                      className="flex-1 py-2 rounded-lg text-sm disabled:opacity-60"
+                      className="flex-1 py-2 rounded-lg text-sm transition-colors hover:bg-[#2A1817] disabled:opacity-60 disabled:hover:bg-transparent"
                       style={{ border: `1px solid ${COLORS.border}`, color: "#E0554F" }}
                     >
                       삭제

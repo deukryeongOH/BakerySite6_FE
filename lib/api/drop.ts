@@ -2,7 +2,34 @@ import { apiRequest } from "@/lib/api/client";
 
 export type DropApiStatus = "UPCOMING" | "ACTIVE" | "COMPLETED";
 
-export interface DropInfo {
+/**
+ * 백엔드 product 도메인의 Category enum. 드롭도 내부적으로는 Product로 저장되고
+ * `Product.validateProductInfo`가 null을 거부하므로 등록/수정 요청에 반드시 담아야 한다.
+ */
+export type DropCategory =
+  | "MEAL_BREADS"
+  | "SWEET_BREADS"
+  | "CAKES_TARTS"
+  | "JAM_SPREAD"
+  | "COOKIES_BAKES";
+
+export const DROP_CATEGORY_LABELS: Record<DropCategory, string> = {
+  MEAL_BREADS: "식사빵",
+  SWEET_BREADS: "간식빵",
+  CAKES_TARTS: "케이크/타르트",
+  JAM_SPREAD: "잼/스프레드",
+  COOKIES_BAKES: "쿠키/구움과자",
+};
+
+/**
+ * `/info`, `/mine`, `/upcoming`, `POST /register`, `PATCH /{dropId}`가 전부 공유하는 응답 DTO.
+ *
+ * 백엔드 `63ab437`(2026-08-13, "Divide Product Domain From Drop")에서 DropProductInfoResponse가
+ * 없어지고 DropInfoResponse 하나로 합쳐지면서 **`pickUpAvailableDates`가 `pickupDates`로 바뀌었다**
+ * (요청 DTO는 여전히 `pickUpAvailableDates`라 이름이 서로 어긋나니 주의).
+ */
+export interface DropInfoResponse {
+  dropId: number;
   name: string;
   description: string;
   imageUrl: string;
@@ -14,6 +41,7 @@ export interface DropInfo {
   remainQuantity: number;
   dropStatus: DropApiStatus;
   pickupDates: string[];
+  category: DropCategory;
 }
 
 /**
@@ -28,15 +56,15 @@ export interface DropInfo {
  * 버그가 났었음). 그래서 여기선 unwrapped 옵션을 쓰지 않는다.
  */
 export function getDropInfo(dropId: number) {
-  return apiRequest<DropInfo>(`/api/v1/drops/${dropId}/info`);
+  return apiRequest<DropInfoResponse>(`/api/v1/drops/${dropId}/info`);
 }
 
 /**
  * 오늘부터 days일 동안(기본 7일) UPCOMING/ACTIVE 상태인 드롭을 dropStart 오름차순으로 조회.
- * 필드 구성은 `GET /drops/mine`(DropProductInfoResponse)과 동일. 인증 필요(403).
+ * 인증 필요(403).
  */
 export function getUpcomingDrops(days?: number) {
-  return apiRequest<DropProductInfoResponse[]>(
+  return apiRequest<DropInfoResponse[]>(
     `/api/v1/drops/upcoming${days !== undefined ? `?days=${days}` : ""}`,
   );
 }
@@ -78,45 +106,26 @@ export function lockStart(dropId: number, quantity: number) {
 }
 
 /**
- * 판매자 본인 드롭 응답(docs/drop-api.md §1.3/§2.3, /mine·PATCH 공용).
- * 고객용 DropInfo와 거의 같지만 dropId가 추가되고, 픽업일 필드명이
- * pickUpAvailableDates로 다르다(두 응답 DTO가 서로 다른 클래스라 이름이 안 맞춰져 있음).
+ * POST /register와 PATCH /{dropId}가 공유하는 바디 DTO(백엔드 DropInfoRequest).
+ *
+ * ⚠️ `dropEnd`는 보내지 않는다 — DropController가 `dropStart.plusMinutes(60)`으로 직접
+ * 계산하므로 드롭 길이는 항상 1시간 고정이고, 바디에 넣어도 무시된다.
+ * ⚠️ 픽업일 필드명이 응답(`pickupDates`)과 달리 요청에선 `pickUpAvailableDates`다.
  */
-export interface DropProductInfoResponse {
-  dropId: number;
+export interface DropInfoRequest {
   name: string;
   description: string;
   imageUrl: string;
   pickUpAvailableDates: string[];
   dropStart: string;
-  dropEnd: string;
   limitQuantity: number;
   price: number;
   totalQuantity: number;
-  remainQuantity: number;
-  dropStatus: DropApiStatus;
+  category: DropCategory;
 }
 
-/**
- * POST /register와 PATCH /{dropId}가 공유하는 바디 DTO(둘 다 백엔드에서 동일한
- * DropProductInfoRequest를 받음 — 2026-07-28 실제 컨트롤러 확인. 이전엔 register가
- * pickUpAvailableDateList/dropPeriodStart/dropPeriodEnd라는 별도 필드명을 쓴다고
- * 문서에 적혀 있었으나 실제 코드엔 없는 필드라 등록 시 400 C001로 실패했었다).
- */
-export interface DropProductInfoRequest {
-  name: string;
-  description: string;
-  imageUrl: string;
-  pickUpAvailableDates: string[];
-  dropStart: string;
-  dropEnd: string;
-  limitQuantity: number;
-  price: number;
-  totalQuantity: number;
-}
-
-export function registerDrop(body: DropProductInfoRequest) {
-  return apiRequest<DropProductInfoResponse>("/api/v1/drops/register", {
+export function registerDrop(body: DropInfoRequest) {
+  return apiRequest<DropInfoResponse>("/api/v1/drops/register", {
     method: "POST",
     body,
   });
@@ -124,7 +133,7 @@ export function registerDrop(body: DropProductInfoRequest) {
 
 /** 로그인한 판매자 본인이 등록한 드롭 전체 조회. 승인된 판매자가 아니면 400 C002. */
 export function getMyDrops() {
-  return apiRequest<DropProductInfoResponse[]>("/api/v1/drops/mine");
+  return apiRequest<DropInfoResponse[]>("/api/v1/drops/mine");
 }
 
 /**
@@ -132,8 +141,8 @@ export function getMyDrops() {
  * 백엔드가 남은 재고를 이 값으로 리셋한다(DropInventory.resetQuantity) — 이미 판매된
  * 수량과 무관하게 재고가 통째로 바뀌므로, 호출하는 UI에서 반드시 경고를 보여줘야 한다.
  */
-export function updateDrop(dropId: number, body: DropProductInfoRequest) {
-  return apiRequest<DropProductInfoResponse>(`/api/v1/drops/${dropId}`, {
+export function updateDrop(dropId: number, body: DropInfoRequest) {
+  return apiRequest<DropInfoResponse>(`/api/v1/drops/${dropId}`, {
     method: "PATCH",
     body,
   });

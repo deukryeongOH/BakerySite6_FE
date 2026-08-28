@@ -5,6 +5,12 @@
 > 에러 코드는 `common/src/main/java/com/openbake/common/exception/ErrorCode.java`가 원본입니다(`DR001~DR017`).
 > 
 > **2026-07-28 갱신:** `/{dropId}/info`, `/mine`, `PATCH /{dropId}`, `DELETE /{dropId}`가 새로 구현됐습니다(`d678dad`, `3ef5001` 커밋). 이제 **`/history`(참여 내역 조회) 하나만 미구현**으로 남았습니다.
+>
+> ⚠️ **2026-08-28: 아래 본문은 응답/요청 필드가 낡았습니다.** 백엔드 `63ab437`("Divide Product Domain From Drop", 2026-08-13)에서 `DropProductInfoResponse`가 사라지고 **`/info`·`/mine`·`/upcoming`·`POST /register`·`PATCH /{dropId}`가 전부 `DropInfoResponse` 하나를 공유**하도록 바뀌었습니다. 정확한 현재 형태는 `lib/api/drop.ts`를 기준으로 보세요. 바뀐 점:
+> - 응답의 `pickUpAvailableDates` → **`pickupDates`** (요청 바디는 여전히 `pickUpAvailableDates`라 이름이 서로 어긋남)
+> - 응답에서 `dropId`가 빠졌다가 2026-08-28 다시 추가됨
+> - 요청 바디에서 **`dropEnd`가 없어짐** — `DropController`가 `dropStart.plusMinutes(60)`으로 계산하므로 드롭 길이는 1시간 고정
+> - **`category`가 요청·응답 양쪽에 추가됨**(`Category` enum, 요청에선 `@NotNull`. `MEAL_BREADS`/`SWEET_BREADS`/`CAKES_TARTS`/`JAM_SPREAD`/`COOKIES_BAKES`)
 
 ## API 목록
 

@@ -20,7 +20,7 @@ import {
   toggleWishlist,
 } from "@/lib/wishlist/wishlist-storage";
 
-export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi.DropInfo }) {
+export function DropDetailView({ dropId, drop }: { dropId: number; drop: dropApi.DropInfoResponse }) {
   const router = useRouter();
   const { memberId } = useAuth();
   const [now, setNow] = useState(() => new Date());

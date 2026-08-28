@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { BackHeader } from "@/components/back-header";
 import { COLORS } from "@/lib/theme";
 import * as dropApi from "@/lib/api/drop";
+import { DROP_CATEGORY_LABELS, type DropCategory } from "@/lib/api/drop";
 import { ApiException } from "@/lib/api/types";
 import { expandDateRange } from "@/lib/format";
 
@@ -42,8 +43,8 @@ export default function EditDropPage() {
     totalQuantity: "",
     limitQuantity: "",
     dropStart: "",
-    dropEnd: "",
   });
+  const [category, setCategory] = useState<DropCategory | "">("");
   const [pickupStart, setPickupStart] = useState("");
   const [pickupEnd, setPickupEnd] = useState("");
   const pickupDates = expandDateRange(pickupStart, pickupEnd);
@@ -60,11 +61,11 @@ export default function EditDropPage() {
           totalQuantity: String(drop.totalQuantity),
           limitQuantity: String(drop.limitQuantity),
           dropStart: toDatetimeLocal(drop.dropStart),
-          dropEnd: toDatetimeLocal(drop.dropEnd),
         });
+        setCategory(drop.category);
         // 기존 데이터가 예전 방식(개별 날짜, 사이 날짜가 빠질 수 있음)으로 등록됐을 수 있어
         // 최솟값~최댓값을 범위로 되돌린다 — 저장 시 그 사이 모든 날짜로 다시 채워진다.
-        const existing = [...drop.pickUpAvailableDates].sort();
+        const existing = [...drop.pickupDates].sort();
         setPickupStart(existing[0] ?? "");
         setPickupEnd(existing[existing.length - 1] ?? "");
         setInitialized(true);
@@ -81,10 +82,10 @@ export default function EditDropPage() {
         imageUrl: form.imageUrl,
         pickUpAvailableDates: pickupDates,
         dropStart: `${form.dropStart}:00`,
-        dropEnd: `${form.dropEnd}:00`,
         limitQuantity: Number(form.limitQuantity),
         price: Number(form.price),
         totalQuantity: Number(form.totalQuantity),
+        category: category as DropCategory,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["myDrops"] });
@@ -140,6 +141,21 @@ export default function EditDropPage() {
             style={inputStyle}
           />
 
+          <select
+            required
+            value={category}
+            onChange={(e) => setCategory(e.target.value as DropCategory)}
+            className={inputClass}
+            style={inputStyle}
+          >
+            <option value="">카테고리 선택</option>
+            {(Object.keys(DROP_CATEGORY_LABELS) as DropCategory[]).map((key) => (
+              <option key={key} value={key}>
+                {DROP_CATEGORY_LABELS[key]}
+              </option>
+            ))}
+          </select>
+
           <div className="flex gap-2">
             <input
               required
@@ -188,19 +204,9 @@ export default function EditDropPage() {
               className={inputClass}
               style={inputStyle}
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs" style={{ color: COLORS.muted }}>
-              드롭 마감 일시
-            </label>
-            <input
-              required
-              type="datetime-local"
-              value={form.dropEnd}
-              onChange={(e) => setForm((f) => ({ ...f, dropEnd: e.target.value }))}
-              className={inputClass}
-              style={inputStyle}
-            />
+            <p className="text-xs" style={{ color: COLORS.muted }}>
+              마감은 시작 1시간 뒤로 자동 설정됩니다.
+            </p>
           </div>
 
           <div className="flex flex-col gap-1.5">

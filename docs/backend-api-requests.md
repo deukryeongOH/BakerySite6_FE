@@ -18,6 +18,7 @@
 | ~~4~~ | ~~주문 상세 응답에 판매자 연락처/주소 추가~~ | **해결됨(2026-07-29)** — 아래 "해결됨" §8 참고 |
 | ~~5~~ | ~~관리자용 전체 정산 목록 조회~~ | **해결됨(2026-07-29)** — 아래 "해결됨" §9 참고 |
 | ~~6~~ | ~~예정된 드롭 목록 조회 (날짜별)~~ | **해결됨(2026-07-29)** — 아래 "해결됨" §10 참고 |
+| ~~1~~ | ~~드롭 조회 응답에 `category` 추가~~ | **해결됨(2026-08-28)** — 아래 "해결됨" §11 참고 |
 | 보류 | §1 판매자 재신청 엔드포인트 | **보류(2026-07-29)** — 제품 결정으로 재신청 기능 자체를 구현하지 않기로 함. 아래 §1 항목 참고 |
 
 > 우선순위 큐가 전부 소진됐습니다. 미해결 목록에는 보류 중인 §1(판매자 재신청)만 남아 있습니다.
@@ -172,3 +173,13 @@
     - `DropRepository`(도메인 포트)에 `findByDropStatusInAndDropStartBetweenOrderByDropStartAsc` 추가 — 기존 `getMyDrops`와 동일하게 `DropInventoryRepository.findByDropId`를 드롭별로 호출해 응답을 조립(N+1이지만 기존 관례를 그대로 따름).
     - 단위 테스트(`DropServiceTest`에 2건 추가), 컨트롤러 테스트(`DropControllerTest` 신규 2건) — drop 프레젠테이션 계층에 컨트롤러 테스트가 전무해 이번에 처음 추가됨. 전체 테스트 스위트(191건) 그린 확인.
 - **프론트 반영 완료(2026-07-29):** 홈 화면(`app/(shop)/page.tsx`)이 `GET /drops/today/drop` 단건 조회를 완전히 대체하고 `getUpcomingDrops()` 하나로 통합됨 — 목록의 첫 항목을 기존 "오늘의 드롭" 히어로 카드(카운트다운 포함)로, 나머지는 `dropStart` 날짜별로 그룹핑해 "다가오는 드롭" 섹션에 날짜 헤더 + 가로 스크롤 카드 리스트로 노출.
+
+---
+
+### 11. 드롭 조회 응답에 `dropId`·`category` 추가
+
+- **요청일:** 2026-08-28 / **해결일:** 2026-08-28
+- **관련 도메인:** drop
+- **배경:** 백엔드 `63ab437`("Divide Product Domain From Drop", 2026-08-13)에서 `DropProductInfoResponse`가 없어지고 모든 드롭 조회가 `DropInfoResponse` 하나를 공유하게 되면서 `dropId`가 응답에서 빠졌습니다. 판매자 대시보드의 수정/삭제가 대상 드롭을 지정할 수 없어(`/seller/drops/undefined/edit`) 통째로 깨졌습니다. 또 등록/수정 요청 DTO는 `category`가 `@NotNull`이고 `Product.validateProductInfo`도 null을 거부하는데 응답엔 `category`가 없어, 수정 화면이 기존 카테고리를 폼에 채워둘 수 없었습니다.
+- **최종 스펙:** `DropInfoResponse`에 `dropId`(Long), `category`(`Category` enum 문자열) 추가.
+- **프론트 반영 완료(2026-08-28):** `lib/api/drop.ts`의 `DropInfo`/`DropProductInfoResponse`를 백엔드와 같이 `DropInfoResponse` 하나로 통합(`pickupDates`·`dropId`·`category` 포함), `DropInfoRequest`는 `dropEnd` 제거·`category` 추가. `app/seller/drops/[dropId]/edit/page.tsx`가 `drop.category`로 셀렉트를 프리필하고, `app/seller/drops/new/page.tsx`에 카테고리 셀렉트 추가.
